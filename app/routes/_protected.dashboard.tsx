@@ -3,9 +3,9 @@ import type { Route } from "./+types/_protected.dashboard";
 import { getPayload } from "~/lib/auth";
 import { api } from "~/lib/api";
 
-/**
- * clientLoader – reads the user from the JWT and loads summary stats.
- */
+// ---------------------------------------------------------------------------
+// clientLoader
+// ---------------------------------------------------------------------------
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
   const user = getPayload();
 

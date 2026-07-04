@@ -52,12 +52,12 @@ export default function ApplicationsList() {
             Gestiona las aplicaciones dadas de alta en las guardias
           </p>
         </div>
-        <Link to="/aplicaciones/nueva">
+        <Link to="/aplicaciones/nueva" className="shrink-0">
           <Button variant="primary" size="md">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Nueva aplicación
+            <span className="whitespace-nowrap">Nueva aplicación</span>
           </Button>
         </Link>
       </div>

@@ -52,12 +52,12 @@ export default function GroupsList() {
             Gestiona los grupos de guardia del sistema
           </p>
         </div>
-        <Link to="/grupos/nuevo">
+        <Link to="/grupos/nuevo" className="shrink-0">
           <Button variant="primary" size="md">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Nuevo grupo
+            <span className="whitespace-nowrap">Nuevo grupo</span>
           </Button>
         </Link>
       </div>

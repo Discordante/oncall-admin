@@ -54,12 +54,12 @@ export default function PeopleList() {
             Gestiona las personas que participan en las guardias
           </p>
         </div>
-        <Link to="/personas/nueva">
+        <Link to="/personas/nueva" className="shrink-0">
           <Button variant="primary" size="md">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            Nueva persona
+            <span className="whitespace-nowrap">Nueva persona</span>
           </Button>
         </Link>
       </div>
