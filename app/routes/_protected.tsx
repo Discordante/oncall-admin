@@ -1,7 +1,6 @@
 import { Outlet, redirect, useLoaderData, useNavigate } from "react-router";
 import type { Route } from "./+types/_protected";
 import { getPayload, clearJwt } from "~/lib/auth";
-import { Button } from "~/components/ui/Button";
 
 // ---------------------------------------------------------------------------
 // clientLoader – runs on every navigation. Redirects to /login if the JWT
@@ -51,13 +50,12 @@ export default function ProtectedLayout() {
               </span>
             </div>
 
-            <Button
+            <button
               onClick={handleLogout}
-              variant="outline"
-              size="sm"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Cerrar sesión
-            </Button>
+            </button>
           </div>
         </div>
       </header>
