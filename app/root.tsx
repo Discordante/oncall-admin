@@ -10,6 +10,10 @@ import {
 import type { Route } from "./+types/root";
 import "./app.css";
 
+// ── Validación de variables de entorno al arrancar ──
+// Si falta VITE_BACKEND_URL o no es una URL válida, falla en dev/build.
+import "./lib/env";
+
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
