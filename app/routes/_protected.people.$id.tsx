@@ -10,10 +10,18 @@ import { Button } from "~/components/ui/Button";
 // ---------------------------------------------------------------------------
 // Zod schema
 // ---------------------------------------------------------------------------
+const phoneRegex = /^(\+\d{1,3}[-.\s]?)?\d{6,14}$/;
+
 const personSchema = z.object({
-  name: z.string().min(1, "El nombre es obligatorio"),
-  email: z.string().email("Email inválido"),
-  phoneNumber: z.string().optional(),
+  name: z.string()
+    .min(1, "El nombre es obligatorio")
+    .max(100, "El nombre no puede tener más de 100 caracteres"),
+  email: z.string()
+    .min(1, "El email es obligatorio")
+    .email("Email inválido"),
+  phoneNumber: z.string()
+    .regex(phoneRegex, "Número de teléfono inválido. Ej: +34612345678")
+    .or(z.literal("")),
   isActive: z.boolean(),
 });
 

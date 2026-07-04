@@ -11,8 +11,13 @@ import { Button } from "~/components/ui/Button";
 // Zod schema
 // ---------------------------------------------------------------------------
 const applicationSchema = z.object({
-  name: z.string().min(1, "El nombre es obligatorio"),
-  description: z.string().optional(),
+  name: z.string()
+    .min(1, "El nombre es obligatorio")
+    .max(100, "El nombre no puede tener más de 100 caracteres"),
+  description: z.string()
+    .max(500, "La descripción no puede tener más de 500 caracteres")
+    .optional()
+    .or(z.literal("")),
 });
 
 type ApplicationForm = z.infer<typeof applicationSchema>;

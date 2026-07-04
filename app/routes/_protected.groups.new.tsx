@@ -6,20 +6,56 @@ import { z } from "zod";
 import type { Route } from "./+types/_protected.groups.new";
 import { api } from "~/lib/api";
 import { Button } from "~/components/ui/Button";
+import { Select } from "~/components/ui/Select";
 
 // ---------------------------------------------------------------------------
 // Zod schema — form fields use string for number inputs
 // ---------------------------------------------------------------------------
 const groupSchema = z.object({
-  name: z.string().min(1, "El nombre es obligatorio"),
-  grossPricePerDay: z.string().optional(),
-  zadarmaSipId: z.string().optional(),
+  name: z.string()
+    .min(1, "El nombre es obligatorio")
+    .max(100, "El nombre no puede tener más de 100 caracteres"),
+  grossPricePerDay: z.string()
+    .regex(/^\d+(\.\d{1,2})?$/, "Precio inválido. Usa formato: 150.00")
+    .or(z.literal("")),
+  zadarmaEnabled: z.boolean(),
+  zadarmaSipId: z.string()
+    .max(50, "El ID del SIP no puede tener más de 50 caracteres")
+    .or(z.literal("")),
   zadarmaRedirectionType: z.enum(["sip", "pbx"]),
   telegramBotEnabled: z.boolean(),
-  telegramBotToken: z.string().optional(),
-  telegramGroupChatId: z.string().optional(),
+  telegramBotToken: z.string()
+    .regex(/^\d+:[A-Za-z0-9_-]+$/, "Token de bot inválido. Ej: 123456:ABCdef")
+    .or(z.literal("")),
+  telegramGroupChatId: z.string()
+    .regex(/^-?\d{5,15}$/, "ID de chat inválido. Ej: -1001234567890")
+    .or(z.literal("")),
   personIds: z.array(z.string()),
   applicationIds: z.array(z.string()),
+}).superRefine((data, ctx) => {
+  if (data.telegramBotEnabled) {
+    if (!data.telegramBotToken) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El token del bot es obligatorio cuando Telegram está habilitado",
+        path: ["telegramBotToken"],
+      });
+    }
+    if (!data.telegramGroupChatId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El ID del chat es obligatorio cuando Telegram está habilitado",
+        path: ["telegramGroupChatId"],
+      });
+    }
+  }
+  if (data.zadarmaEnabled && !data.zadarmaSipId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "El ID del SIP es obligatorio cuando Zadarma está habilitado",
+      path: ["zadarmaSipId"],
+    });
+  }
 });
 
 type GroupForm = z.infer<typeof groupSchema>;
@@ -58,6 +94,7 @@ export default function NewGroup() {
     defaultValues: {
       name: "",
       grossPricePerDay: "",
+      zadarmaEnabled: false,
       zadarmaSipId: "",
       zadarmaRedirectionType: "sip",
       telegramBotEnabled: false,
@@ -69,6 +106,7 @@ export default function NewGroup() {
   });
 
   const telegramBotEnabled = watch("telegramBotEnabled");
+  const zadarmaEnabled = watch("zadarmaEnabled");
   const [serverError, setServerError] = useState<string | null>(null);
 
   const onSubmit = async (data: GroupForm) => {
@@ -82,8 +120,8 @@ export default function NewGroup() {
         grossPricePerDay: parsedPrice,
         personIds: data.personIds.length > 0 ? data.personIds : undefined,
         applicationIds: data.applicationIds.length > 0 ? data.applicationIds : undefined,
-        zadarmaSipId: data.zadarmaSipId || undefined,
-        zadarmaRedirectionType: data.zadarmaRedirectionType,
+        zadarmaSipId: data.zadarmaEnabled ? (data.zadarmaSipId || undefined) : undefined,
+        zadarmaRedirectionType: data.zadarmaEnabled ? data.zadarmaRedirectionType : undefined,
         telegramBotEnabled: data.telegramBotEnabled,
         telegramBotToken: data.telegramBotEnabled ? (data.telegramBotToken || undefined) : undefined,
         telegramGroupChatId: data.telegramBotEnabled ? (data.telegramGroupChatId || undefined) : undefined,
@@ -171,36 +209,53 @@ export default function NewGroup() {
 
         {/* Zadarma config */}
         <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-            Configuración Zadarma
-          </h3>
-          <div className="mt-4 space-y-4">
-            <div>
-              <label htmlFor="zadarmaSipId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                ID del SIP
-              </label>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+              Configuración Zadarma
+            </h3>
+            <label className="relative inline-flex cursor-pointer items-center">
               <input
-                id="zadarmaSipId"
-                type="text"
-                {...register("zadarmaSipId")}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                placeholder="Ej: 921495"
+                type="checkbox"
+                {...register("zadarmaEnabled")}
+                className="peer sr-only"
+              />
+              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
+            </label>
+          </div>
+          {zadarmaEnabled && (
+            <div className="mt-4 space-y-4">
+              <div>
+                <label htmlFor="zadarmaSipId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  ID del SIP
+                </label>
+                <input
+                  id="zadarmaSipId"
+                  type="text"
+                  {...register("zadarmaSipId")}
+                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                  placeholder="Ej: 921495"
+                />
+                {errors.zadarmaSipId && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.zadarmaSipId.message}</p>
+                )}
+              </div>
+              <Controller
+                control={control}
+                name="zadarmaRedirectionType"
+                render={({ field }) => (
+                  <Select
+                    label="Tipo de redirección"
+                    options={[
+                      { value: "sip", label: "SIP" },
+                      { value: "pbx", label: "PBX" },
+                    ]}
+                    value={field.value}
+                    onChange={(val) => field.onChange(val)}
+                  />
+                )}
               />
             </div>
-            <div>
-              <label htmlFor="zadarmaRedirectionType" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Tipo de redirección
-              </label>
-              <select
-                id="zadarmaRedirectionType"
-                {...register("zadarmaRedirectionType")}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-              >
-                <option value="sip">SIP</option>
-                <option value="pbx">PBX</option>
-              </select>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Telegram config */}
@@ -268,39 +323,16 @@ export default function NewGroup() {
               control={control}
               name="personIds"
               render={({ field }) => (
-                <div className="mt-3 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700">
-                  {people.map((person) => (
-                    <label
-                      key={person.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                        field.value.includes(person.id!)
-                          ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                          : "hover:bg-gray-50 dark:hover:bg-gray-800"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={field.value.includes(person.id!)}
-                        onChange={() => {
-                          const newVal = field.value.includes(person.id!)
-                            ? field.value.filter((p) => p !== person.id)
-                            : [...field.value, person.id!];
-                          field.onChange(newVal);
-                        }}
-                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium">{person.name}</span>
-                        <span className="ml-2 text-gray-500 dark:text-gray-400">{person.email}</span>
-                      </div>
-                      {!person.isActive && (
-                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400">
-                          Inactivo
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
+                <Select
+                  mode="multi"
+                  placeholder="Buscar personas..."
+                  options={people.map((p) => ({
+                    value: p.id!,
+                    label: `${p.name}${p.email ? ` — ${p.email}` : ""}${!p.isActive ? " (Inactivo)" : ""}`,
+                  }))}
+                  value={field.value}
+                  onChange={(val) => field.onChange(val)}
+                />
               )}
             />
           )}
@@ -326,36 +358,16 @@ export default function NewGroup() {
               control={control}
               name="applicationIds"
               render={({ field }) => (
-                <div className="mt-3 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700">
-                  {applications.map((app) => (
-                    <label
-                      key={app.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                        field.value.includes(app.id!)
-                          ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                          : "hover:bg-gray-50 dark:hover:bg-gray-800"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={field.value.includes(app.id!)}
-                        onChange={() => {
-                          const newVal = field.value.includes(app.id!)
-                            ? field.value.filter((a) => a !== app.id)
-                            : [...field.value, app.id!];
-                          field.onChange(newVal);
-                        }}
-                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="font-medium">{app.name}</span>
-                        {app.description && (
-                          <span className="ml-2 text-gray-500 dark:text-gray-400">{app.description}</span>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <Select
+                  mode="multi"
+                  placeholder="Buscar aplicaciones..."
+                  options={applications.map((a) => ({
+                    value: a.id!,
+                    label: `${a.name}${a.description ? ` — ${a.description}` : ""}`,
+                  }))}
+                  value={field.value}
+                  onChange={(val) => field.onChange(val)}
+                />
               )}
             />
           )}
