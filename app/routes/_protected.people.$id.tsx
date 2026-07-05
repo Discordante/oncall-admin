@@ -66,6 +66,12 @@ export default function EditPerson() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // ---- Telegram linking ----
+  const [telegramCode, setTelegramCode] = useState("");
+  const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [telegramLinked, setTelegramLinked] = useState(person.telegramLinked ?? false);
+  const [telegramError, setTelegramError] = useState<string | null>(null);
+
   const onSubmit = async (data: PersonForm) => {
     setServerError(null);
 
@@ -105,6 +111,28 @@ export default function EditPerson() {
     }
 
     navigate("/personas");
+  };
+
+  // ---- Telegram linking ----
+  const handleLinkTelegram = async () => {
+    if (!telegramCode.trim()) return;
+
+    setLinkingTelegram(true);
+    setTelegramError(null);
+
+    const { error } = await api.POST("/api/v1/telegram/link", {
+      body: { code: telegramCode.trim() },
+    });
+
+    if (error) {
+      setTelegramError("Error al vincular Telegram");
+      setLinkingTelegram(false);
+      return;
+    }
+
+    setTelegramLinked(true);
+    setTelegramCode("");
+    setLinkingTelegram(false);
   };
 
   return (
@@ -193,6 +221,59 @@ export default function EditPerson() {
               </label>
             </div>
           </div>
+        </div>
+
+        {/* Telegram */}
+        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+            Vinculación con Telegram
+          </h3>
+
+          {telegramLinked ? (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-medium text-sky-700 dark:bg-sky-900 dark:text-sky-300">
+                Vinculado
+              </span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Esta persona tiene una cuenta de Telegram vinculada
+              </span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Para vincular, inicia el bot de Telegram con <code className="rounded bg-gray-100 px-1 py-0.5 text-xs font-mono text-gray-800 dark:bg-gray-700 dark:text-gray-200">/start</code>{" "}
+                e introduce aquí el código que recibas.
+              </p>
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label htmlFor="telegramCode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Código de verificación
+                  </label>
+                  <input
+                    id="telegramCode"
+                    type="text"
+                    value={telegramCode}
+                    onChange={(e) => setTelegramCode(e.target.value)}
+                    placeholder="Ej: a1b2c3d4-..."
+                    className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  loading={linkingTelegram}
+                  disabled={!telegramCode.trim()}
+                  onClick={handleLinkTelegram}
+                >
+                  Vincular
+                </Button>
+              </div>
+              {telegramError && (
+                <p className="text-sm text-red-600 dark:text-red-400">{telegramError}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Actions */}

@@ -611,6 +611,11 @@ export interface components {
              */
             telegramBotEnabled?: boolean;
             /**
+             * @description Token del bot de Telegram para este grupo
+             * @example 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+             */
+            telegramBotToken?: string;
+            /**
              * @description ID del chat/grupo de Telegram donde opera el bot
              * @example -1001234567890
              */
