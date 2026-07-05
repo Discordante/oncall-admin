@@ -52,7 +52,7 @@ export default function EditPerson() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PersonForm>({
     resolver: zodResolver(personSchema),
     defaultValues: {
@@ -209,16 +209,18 @@ export default function EditPerson() {
             </svg>
             Eliminar persona
           </Button>
-          <div className="flex items-center gap-3">
-            <Link to="/personas">
-              <Button type="button" variant="outline" size="md">
-                Cancelar
+          {isDirty && (
+            <div className="flex items-center gap-3">
+              <Link to="/personas">
+                <Button type="button" variant="outline" size="md">
+                  Cancelar
+                </Button>
+              </Link>
+              <Button type="submit" variant="primary" size="md" loading={isSubmitting}>
+                Guardar cambios
               </Button>
-            </Link>
-            <Button type="submit" variant="primary" size="md" loading={isSubmitting}>
-              Guardar cambios
-            </Button>
-          </div>
+            </div>
+          )}
         </div>
       </form>
     </div>

@@ -1,52 +1,48 @@
 import { useState } from "react";
 import { useLoaderData, useNavigate, Link } from "react-router";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import type { Route } from "./+types/_protected.groups.$id";
 import { api } from "~/lib/api";
+import { GroupForm } from "~/components/GroupForm";
+import type { GroupFormData } from "~/components/GroupForm";
+import { ShiftManager } from "~/components/ShiftManager";
+import { BillingTab } from "~/components/BillingTab";
 import { Button } from "~/components/ui/Button";
-import { Select } from "~/components/ui/Select";
 
 // ---------------------------------------------------------------------------
-// Zod schema — form fields use string for number inputs
+// Tab configuration
 // ---------------------------------------------------------------------------
-const groupSchema = z.object({
-  name: z.string()
-    .min(1, "El nombre es obligatorio")
-    .max(100, "El nombre no puede tener más de 100 caracteres"),
-  grossPricePerDay: z.string()
-    .regex(/^\d+(\.\d{1,2})?$/, "Precio inválido. Usa formato: 150.00")
-    .or(z.literal("")),
-  zadarmaEnabled: z.boolean(),
-  zadarmaSipId: z.string()
-    .max(50, "El ID del SIP no puede tener más de 50 caracteres")
-    .or(z.literal("")),
-  zadarmaRedirectionType: z.enum(["sip", "pbx"]),
-  telegramBotEnabled: z.boolean(),
-  telegramGroupChatId: z.string()
-    .regex(/^-?\d{5,15}$/, "ID de chat inválido. Ej: -1001234567890")
-    .or(z.literal("")),
-  personIds: z.array(z.string()),
-  applicationIds: z.array(z.string()),
-}).superRefine((data, ctx) => {
-  if (data.telegramBotEnabled && !data.telegramGroupChatId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "El ID del chat es obligatorio cuando Telegram está habilitado",
-      path: ["telegramGroupChatId"],
-    });
-  }
-  if (data.zadarmaEnabled && !data.zadarmaSipId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "El ID del SIP es obligatorio cuando Zadarma está habilitado",
-      path: ["zadarmaSipId"],
-    });
-  }
-});
+type TabId = "info" | "shifts" | "billing";
 
-type GroupForm = z.infer<typeof groupSchema>;
+const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  {
+    id: "info",
+    label: "Información",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
+    id: "shifts",
+    label: "Turnos",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
+      </svg>
+    ),
+  },
+  {
+    id: "billing",
+    label: "Facturación",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+];
 
 // ---------------------------------------------------------------------------
 // clientLoader
@@ -72,38 +68,31 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function EditGroup() {
+export default function GroupDashboard() {
   const { group, people, applications } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
-
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    formState: { errors, isSubmitting },
-  } = useForm<GroupForm>({
-    resolver: zodResolver(groupSchema),
-    defaultValues: {
-      name: group.name ?? "",
-      grossPricePerDay: group.grossPricePerDay != null ? String(group.grossPricePerDay) : "",
-      zadarmaEnabled: group.zadarmaSipId ? true : false,
-      zadarmaSipId: group.zadarmaSipId ?? "",
-      zadarmaRedirectionType: (group.zadarmaRedirectionType as "sip" | "pbx") ?? "sip",
-      telegramBotEnabled: group.telegramBotEnabled ?? false,
-      telegramGroupChatId: group.telegramGroupChatId ?? "",
-      personIds: group.people?.map((p) => p.id!).filter(Boolean) ?? [],
-      applicationIds: group.applications?.map((a) => a.id!).filter(Boolean) ?? [],
-    },
-  });
-
-  const telegramBotEnabled = watch("telegramBotEnabled");
-  const zadarmaEnabled = watch("zadarmaEnabled");
+  const [activeTab, setActiveTab] = useState<TabId>("info");
   const [serverError, setServerError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const onSubmit = async (data: GroupForm) => {
+  // ── Group form handlers (same logic as before) ──
+  const defaultValues: Partial<GroupFormData> = {
+    name: group.name ?? "",
+    grossPricePerDay: group.grossPricePerDay != null ? String(group.grossPricePerDay) : "",
+    zadarmaEnabled: group.zadarmaSipId ? true : false,
+    zadarmaSipId: group.zadarmaSipId ?? "",
+    zadarmaRedirectionType: (group.zadarmaRedirectionType as "sip" | "pbx") ?? "sip",
+    telegramBotEnabled: group.telegramBotEnabled ?? false,
+    telegramBotToken: "",
+    telegramGroupChatId: group.telegramGroupChatId ?? "",
+    personIds: group.people?.map((p) => p.id!).filter(Boolean) ?? [],
+    applicationIds: group.applications?.map((a) => a.id!).filter(Boolean) ?? [],
+  };
+
+  const onSubmit = async (data: GroupFormData): Promise<string | null> => {
     setServerError(null);
+    setSaveSuccess(false);
 
     const parsedPrice = data.grossPricePerDay ? Number(data.grossPricePerDay) : undefined;
 
@@ -117,17 +106,19 @@ export default function EditGroup() {
         zadarmaSipId: data.zadarmaEnabled ? (data.zadarmaSipId || undefined) : undefined,
         zadarmaRedirectionType: data.zadarmaEnabled ? data.zadarmaRedirectionType : undefined,
         telegramBotEnabled: data.telegramBotEnabled,
+        telegramBotToken: data.telegramBotEnabled ? (data.telegramBotToken || undefined) : undefined,
         telegramGroupChatId: data.telegramBotEnabled ? (data.telegramGroupChatId || undefined) : undefined,
       },
     });
 
     if (apiError) {
-      const msg = apiError.errors?.[0]?.message ?? "Error al actualizar el grupo";
-      setServerError(msg);
-      return;
+      return apiError.errors?.[0]?.message ?? "Error al actualizar el grupo";
     }
 
-    navigate("/grupos");
+    // Show success message instead of navigating away
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 4000);
+    return null;
   };
 
   const handleDelete = async () => {
@@ -149,9 +140,15 @@ export default function EditGroup() {
     navigate("/grupos");
   };
 
+  // ── Build people list from the group for ShiftManager / BillingTab ──
+  const groupPeople = (group.people ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+  }));
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      {/* Header */}
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* ── Header ── */}
       <div>
         <Link
           to="/grupos"
@@ -166,249 +163,87 @@ export default function EditGroup() {
           {group.name}
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Edita los datos del grupo de guardia
+          Gestiona la configuración, turnos y facturación del grupo
         </p>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {serverError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
-            {serverError}
-          </div>
-        )}
+      {/* ── Tabs ── */}
+      <div className="border-b border-gray-200 dark:border-gray-700">
+        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="Tabs">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={isActive}
+                className={[
+                  "inline-flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400"
+                    : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300",
+                ].join(" ")}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
 
-        {/* Basic info */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-            Información básica
-          </h3>
-          <div className="mt-4 space-y-4">
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Nombre del grupo *
-              </label>
-              <input
-                id="name"
-                type="text"
-                {...register("name")}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-              />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.name.message}</p>
-              )}
-            </div>
-            <div>
-              <label htmlFor="grossPricePerDay" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Precio bruto por día (€)
-              </label>
-              <input
-                id="grossPricePerDay"
-                type="number"
-                step="0.01"
-                min="0"
-                {...register("grossPricePerDay")}
-                className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                placeholder="Ej: 150"
-              />
-            </div>
-          </div>
+      {/* ── Save success toast ── */}
+      {saveSuccess && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
+          Grupo actualizado correctamente.
         </div>
+      )}
 
-        {/* Zadarma config */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-              Configuración Zadarma
-            </h3>
-            <label className="relative inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                {...register("zadarmaEnabled")}
-                className="peer sr-only"
-              />
-              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-            </label>
-          </div>
-          {zadarmaEnabled && (
-            <div className="mt-4 space-y-4">
-              <div>
-                <label htmlFor="zadarmaSipId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  ID del SIP
-                </label>
-                <input
-                  id="zadarmaSipId"
-                  type="text"
-                  {...register("zadarmaSipId")}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                  placeholder="Ej: 921495"
-                />
-                {errors.zadarmaSipId && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.zadarmaSipId.message}</p>
-                )}
-              </div>
-              <Controller
-                control={control}
-                name="zadarmaRedirectionType"
-                render={({ field }) => (
-                  <Select
-                    label="Tipo de redirección"
-                    options={[
-                      { value: "sip", label: "SIP" },
-                      { value: "pbx", label: "PBX" },
-                    ]}
-                    value={field.value}
-                    onChange={(val) => field.onChange(val)}
-                  />
-                )}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Telegram config */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-              Integración Telegram
-            </h3>
-            <label className="relative inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                {...register("telegramBotEnabled")}
-                className="peer sr-only"
-              />
-              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-            </label>
-          </div>
-          {telegramBotEnabled && (
-            <div className="mt-4 space-y-4">
-              <div>
-                <label htmlFor="telegramGroupChatId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  ID del Chat/Grupo
-                </label>
-                <input
-                  id="telegramGroupChatId"
-                  type="text"
-                  {...register("telegramGroupChatId")}
-                  className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                  placeholder="Ej: -1001234567890"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* People selector */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Personas
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Personas asignadas al grupo
-              </p>
-            </div>
-            <Link to="/personas/nueva">
-              <Button type="button" variant="outline" size="sm">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+      {/* ── Tab content ── */}
+      {/* Info tab: hidden instead of unmounted to preserve form state */}
+      <div className={activeTab === "info" ? "" : "hidden"}>
+        <div className="max-w-2xl space-y-6">
+          <GroupForm
+            people={people}
+            applications={applications}
+            defaultValues={defaultValues}
+            onSubmit={onSubmit}
+            submitLabel="Guardar cambios"
+            hideActionsWhenPristine
+            telegramGroupInviteLink={group.telegramGroupInviteLink}
+            footerLeft={
+              <Button
+                type="button"
+                variant="danger"
+                size="md"
+                loading={deleting}
+                onClick={handleDelete}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                 </svg>
-                Nueva persona
+                Eliminar grupo
               </Button>
-            </Link>
-          </div>
-          {people.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-400">No hay personas disponibles.</p>
-          ) : (
-            <Controller
-              control={control}
-              name="personIds"
-              render={({ field }) => (
-                <Select
-                  mode="multi"
-                  placeholder="Buscar personas..."
-                  options={people.map((p) => ({
-                    value: p.id!,
-                    label: `${p.name}${p.email ? ` — ${p.email}` : ""}${!p.isActive ? " (Inactivo)" : ""}`,
-                  }))}
-                  value={field.value}
-                  onChange={(val) => field.onChange(val)}
-                />
-              )}
-            />
-          )}
+            }
+          />
         </div>
+      </div>
 
-        {/* Applications selector */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                Aplicaciones
-              </h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Aplicaciones asignadas al grupo
-              </p>
-            </div>
-            <Link to="/aplicaciones/nueva">
-              <Button type="button" variant="outline" size="sm">
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Nueva aplicación
-              </Button>
-            </Link>
-          </div>
-          {applications.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-400">No hay aplicaciones disponibles.</p>
-          ) : (
-            <Controller
-              control={control}
-              name="applicationIds"
-              render={({ field }) => (
-                <Select
-                  mode="multi"
-                  placeholder="Buscar aplicaciones..."
-                  options={applications.map((a) => ({
-                    value: a.id!,
-                    label: `${a.name}${a.description ? ` — ${a.description}` : ""}`,
-                  }))}
-                  value={field.value}
-                  onChange={(val) => field.onChange(val)}
-                />
-              )}
-            />
-          )}
-        </div>
+      {/* Shifts tab */}
+      {activeTab === "shifts" && (
+        <ShiftManager groupId={group.id!} people={groupPeople} />
+      )}
 
-        {/* Actions */}
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="danger"
-            size="md"
-            loading={deleting}
-            onClick={handleDelete}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-            Eliminar grupo
-          </Button>
-          <div className="flex items-center gap-3">
-            <Link to="/grupos">
-              <Button type="button" variant="outline" size="md">
-                Cancelar
-              </Button>
-            </Link>
-            <Button type="submit" variant="primary" size="md" loading={isSubmitting}>
-              Guardar cambios
-            </Button>
-          </div>
-        </div>
-      </form>
+      {/* Billing tab */}
+      {activeTab === "billing" && (
+        <BillingTab
+          groupId={group.id!}
+          grossPricePerDay={group.grossPricePerDay}
+          groupPeople={groupPeople}
+        />
+      )}
     </div>
   );
 }

@@ -15,6 +15,30 @@ import type {
 export interface SelectOption {
   readonly value: string;
   readonly label: string;
+  readonly chipColor?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Chip color palette — one color per option index
+// ---------------------------------------------------------------------------
+
+export const CHIP_COLORS = [
+  "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
+  "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
+  "bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300",
+  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  "bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300",
+];
+
+/** Assign a rotating chip color to each option based on its index. */
+export function assignChipColors<T extends SelectOption>(options: T[]): T[] {
+  return options.map((opt, i) => ({
+    ...opt,
+    chipColor: CHIP_COLORS[i % CHIP_COLORS.length],
+  }));
 }
 
 // Base props that don't depend on mode
@@ -79,13 +103,20 @@ function buildClassNames(): ClassNamesConfig<SelectOption, boolean, GroupBase<Se
       `${isSelected ? "font-medium" : ""} ` +
       `${isFocused && !isSelected ? "bg-indigo-50 dark:bg-indigo-950" : ""} ` +
       `${isSelected ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" : "text-gray-900 dark:text-white"}`,
-    multiValue: () =>
-      "rounded-md bg-indigo-100 text-indigo-700 text-xs font-medium " +
-      "dark:bg-indigo-950 dark:text-indigo-300",
+    multiValue: ({ data }) => {
+      const cc = (data as SelectOption).chipColor;
+      const base = "rounded-md text-xs font-medium";
+      return cc
+        ? `${base} ${cc}`
+        : `${base} bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300`;
+    },
     multiValueLabel: () => "px-1.5 py-0.5",
-    multiValueRemove: () =>
-      "rounded-r-md text-indigo-500 hover:bg-indigo-200 hover:text-indigo-800 " +
-      "dark:text-indigo-400 dark:hover:bg-indigo-900 dark:hover:text-indigo-200",
+    multiValueRemove: ({ data }) => {
+      const hasColor = !!(data as SelectOption).chipColor;
+      return hasColor
+        ? "rounded-r-md opacity-70 hover:opacity-100 hover:bg-black/10 dark:hover:bg-white/10"
+        : "rounded-r-md text-indigo-500 hover:bg-indigo-200 hover:text-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-900 dark:hover:text-indigo-200";
+    },
     indicatorsContainer: () => "gap-0.5",
     clearIndicator: () =>
       "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
