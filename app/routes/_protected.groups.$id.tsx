@@ -84,7 +84,7 @@ export default function GroupDashboard() {
     zadarmaSipId: group.zadarmaSipId ?? "",
     zadarmaRedirectionType: (group.zadarmaRedirectionType as "sip" | "pbx") ?? "sip",
     telegramBotEnabled: group.telegramBotEnabled ?? false,
-    telegramBotToken: "",
+    telegramBotToken: group.telegramBotToken ?? "",
     telegramGroupChatId: group.telegramGroupChatId ?? "",
     personIds: group.people?.map((p) => p.id!).filter(Boolean) ?? [],
     applicationIds: group.applications?.map((a) => a.id!).filter(Boolean) ?? [],
@@ -106,8 +106,8 @@ export default function GroupDashboard() {
         zadarmaSipId: data.zadarmaEnabled ? (data.zadarmaSipId || undefined) : undefined,
         zadarmaRedirectionType: data.zadarmaEnabled ? data.zadarmaRedirectionType : undefined,
         telegramBotEnabled: data.telegramBotEnabled,
-        telegramBotToken: data.telegramBotEnabled ? (data.telegramBotToken || undefined) : undefined,
-        telegramGroupChatId: data.telegramBotEnabled ? (data.telegramGroupChatId || undefined) : undefined,
+        telegramBotToken: data.telegramBotToken || undefined,
+        telegramGroupChatId: data.telegramGroupChatId || undefined,
       },
     });
 
@@ -206,6 +206,7 @@ export default function GroupDashboard() {
       <div className={activeTab === "info" ? "" : "hidden"}>
         <div className="max-w-2xl space-y-6">
           <GroupForm
+            key={group.id}
             people={people}
             applications={applications}
             defaultValues={defaultValues}

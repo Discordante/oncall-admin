@@ -42,7 +42,7 @@ export default function NewGroup() {
         zadarmaSipId: data.zadarmaEnabled ? (data.zadarmaSipId || undefined) : undefined,
         zadarmaRedirectionType: data.zadarmaEnabled ? data.zadarmaRedirectionType : undefined,
         telegramBotEnabled: data.telegramBotEnabled,
-        telegramBotToken: data.telegramBotEnabled ? (data.telegramBotToken || undefined) : undefined,
+        telegramBotToken: data.telegramBotToken || undefined,
         telegramGroupChatId: data.telegramBotEnabled ? (data.telegramGroupChatId || undefined) : undefined,
       },
     });

@@ -181,6 +181,7 @@ export function GroupForm({
     handleSubmit,
     control,
     watch,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
   } = useForm<GroupFormData>({
     resolver: zodResolver(groupSchema),
@@ -347,7 +348,13 @@ export function GroupForm({
             <PasswordField
               id="telegramBotToken"
               label="Token del Bot *"
-              register={register("telegramBotToken")}
+              register={register("telegramBotToken", {
+                onChange: (e) => {
+                  if (!e.target.value && telegramBotEnabled) {
+                    setValue("telegramBotEnabled", false, { shouldDirty: false });
+                  }
+                },
+              })}
               placeholder="Token del bot de Telegram"
               error={errors.telegramBotToken?.message}
             />
@@ -358,7 +365,13 @@ export function GroupForm({
               <input
                 id="telegramGroupChatId"
                 type="text"
-                {...register("telegramGroupChatId")}
+                {...register("telegramGroupChatId", {
+                  onChange: (e) => {
+                    if (!e.target.value && telegramBotEnabled) {
+                      setValue("telegramBotEnabled", false, { shouldDirty: false });
+                    }
+                  },
+                })}
                 className={inputCls}
                 placeholder="Ej: -1001234567890"
               />
