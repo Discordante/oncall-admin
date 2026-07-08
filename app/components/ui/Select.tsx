@@ -16,6 +16,7 @@ export interface SelectOption {
   readonly value: string;
   readonly label: string;
   readonly chipColor?: string;
+  readonly disabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,8 +99,8 @@ function buildClassNames(): ClassNamesConfig<SelectOption, boolean, GroupBase<Se
       "rounded-lg border border-gray-200 bg-white text-sm shadow-lg z-50 " +
       "dark:border-gray-600 dark:bg-gray-800",
     menuList: () => "p-1",
-    option: ({ isFocused, isSelected }) =>
-      `rounded-md px-3 py-2 text-sm cursor-pointer ` +
+    option: ({ isFocused, isSelected, isDisabled }) =>
+      `rounded-md px-3 py-2 text-sm ${isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"} ` +
       `${isSelected ? "font-medium" : ""} ` +
       `${isFocused && !isSelected ? "bg-indigo-50 dark:bg-indigo-950" : ""} ` +
       `${isSelected ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300" : "text-gray-900 dark:text-white"}`,
@@ -191,6 +192,7 @@ export function Select(props: SelectProps) {
         hideSelectedOptions={false}
         classNames={buildClassNames()}
         formatOptionLabel={customFormat}
+        isOptionDisabled={(option) => !!(option as SelectOption).disabled}
         unstyled
       />
       {error && (

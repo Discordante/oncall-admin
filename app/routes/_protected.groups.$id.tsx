@@ -6,12 +6,13 @@ import { GroupForm } from "~/components/GroupForm";
 import type { GroupFormData } from "~/components/GroupForm";
 import { ShiftManager } from "~/components/ShiftManager";
 import { BillingTab } from "~/components/BillingTab";
+import { CallsSummaryTab } from "~/components/CallsSummaryTab";
 import { Button } from "~/components/ui/Button";
 
 // ---------------------------------------------------------------------------
 // Tab configuration
 // ---------------------------------------------------------------------------
-type TabId = "info" | "shifts" | "billing";
+type TabId = "info" | "shifts" | "billing" | "calls";
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
   {
@@ -42,16 +43,26 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    id: "calls",
+    label: "Llamadas",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+      </svg>
+    ),
+  },
 ];
 
 // ---------------------------------------------------------------------------
 // clientLoader
 // ---------------------------------------------------------------------------
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
-  const [groupRes, peopleRes, appsRes] = await Promise.all([
+  const [groupRes, peopleRes, appsRes, sipsRes] = await Promise.all([
     api.GET("/api/v1/on-call-groups/{id}", { params: { path: { id: params.id } } }),
     api.GET("/api/v1/people", { params: { query: { includeInactive: true } } }),
     api.GET("/api/v1/applications"),
+    api.GET("/api/v1/zadarma/sips"),
   ]);
 
   if (groupRes.error || !groupRes.data?.data) {
@@ -62,6 +73,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
     group: groupRes.data.data,
     people: peopleRes.data?.data ?? [],
     applications: appsRes.data?.data ?? [],
+    sips: sipsRes.data?.data ?? [],
   };
 }
 
@@ -69,7 +81,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 // Component
 // ---------------------------------------------------------------------------
 export default function GroupDashboard() {
-  const { group, people, applications } = useLoaderData<typeof clientLoader>();
+  const { group, people, applications, sips } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabId>("info");
   const [serverError, setServerError] = useState<string | null>(null);
@@ -144,10 +156,11 @@ export default function GroupDashboard() {
   const groupPeople = (group.people ?? []).map((p) => ({
     id: p.id,
     name: p.name,
+    phoneNumber: p.phoneNumber,
   }));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       {/* ── Header ── */}
       <div>
         <Link
@@ -163,7 +176,7 @@ export default function GroupDashboard() {
           {group.name}
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Gestiona la configuración, turnos y facturación del grupo
+          Gestiona la configuración, turnos, facturación y llamadas del grupo
         </p>
       </div>
 
@@ -214,6 +227,8 @@ export default function GroupDashboard() {
             submitLabel="Guardar cambios"
             hideActionsWhenPristine
             telegramGroupInviteLink={group.telegramGroupInviteLink}
+            sipOptions={sips}
+            currentGroupName={group.name}
             footerLeft={
               <Button
                 type="button"
@@ -244,6 +259,11 @@ export default function GroupDashboard() {
           grossPricePerDay={group.grossPricePerDay}
           groupPeople={groupPeople}
         />
+      )}
+
+      {/* Calls tab */}
+      {activeTab === "calls" && (
+        <CallsSummaryTab sipId={group.zadarmaSipId} groupId={group.id} groupPeople={groupPeople} />
       )}
     </div>
   );

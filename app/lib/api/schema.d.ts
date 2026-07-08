@@ -296,6 +296,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/zadarma/calls-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Llamadas entrantes
+         * @description Obtiene el listado completo de llamadas entrantes desde Zadarma para el rango de fechas indicado, con todos los campos disponibles (id, sip, callstart, from, to, billseconds, disposition, description)
+         */
+        get: operations["getCallsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/zadarma/sips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar SIPs
+         * @description Obtiene la lista de IDs SIP configurados en la cuenta de Zadarma, enriquecida con el nombre del grupo de guardia que lo emplea (si existe)
+         */
+        get: operations["getSips"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -370,6 +410,13 @@ export interface components {
             errors?: components["schemas"]["ValidationError"][];
         };
         /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseListSipInfoResponse: {
+            /** @description Datos de la respuesta */
+            data?: components["schemas"]["SipInfoResponse"][];
+            /** @description Lista de errores, si los hay */
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
         ApiResponseOnCallGroupResponse: {
             /** @description Datos de la respuesta */
             data?: components["schemas"]["OnCallGroupResponse"];
@@ -394,6 +441,13 @@ export interface components {
         ApiResponseTelegramLinkResponse: {
             /** @description Datos de la respuesta */
             data?: components["schemas"]["TelegramLinkResponse"];
+            /** @description Lista de errores, si los hay */
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseZadarmaStatsResponse: {
+            /** @description Datos de la respuesta */
+            data?: components["schemas"]["ZadarmaStatsResponse"];
             /** @description Lista de errores, si los hay */
             errors?: components["schemas"]["ValidationError"][];
         };
@@ -792,6 +846,19 @@ export interface components {
              */
             updatedAt?: string;
         };
+        /** @description Información de un SIP de Zadarma */
+        SipInfoResponse: {
+            /**
+             * @description Nombre del grupo de guardia que usa este SIP, o null si no está asignado
+             * @example Soporte Técnico
+             */
+            groupName?: string;
+            /**
+             * @description Identificador SIP en Zadarma
+             * @example 123456
+             */
+            sipId?: string;
+        };
         /** @description Solicitud para vincular una cuenta de Telegram con un usuario */
         TelegramLinkRequest: {
             /**
@@ -830,6 +897,71 @@ export interface components {
              * @example El campo 'name' es obligatorio
              */
             message?: string;
+        };
+        /** @description Registro individual de llamada entrante */
+        ZadarmaCallRecord: {
+            /**
+             * Format: int32
+             * @description Duración facturada en segundos
+             * @example 0
+             */
+            billseconds?: number;
+            /**
+             * @description Fecha y hora de inicio de la llamada (YYYY-MM-DD HH:MM:SS)
+             * @example 2015-06-02 12:20:25
+             */
+            callstart?: string;
+            /**
+             * @description Descripción o ubicación asociada
+             * @example United Kingdom, London
+             */
+            description?: string;
+            /**
+             * @description Estado de la llamada
+             * @enum {string}
+             */
+            disposition?: "answered" | "busy" | "cancel" | "no answer" | "failed" | "no money" | "unallocated number" | "no limit" | "no day limit" | "line limit" | "no money, no limit";
+            /**
+             * Format: int64
+             * @description Número de origen (llamante)
+             * @example 442037691880
+             */
+            from?: number;
+            /**
+             * @description Identificador único de la llamada
+             * @example 155112249
+             */
+            id?: string;
+            /**
+             * @description Número SIP
+             * @example 00001
+             */
+            sip?: string;
+            /**
+             * Format: int64
+             * @description Número de destino (llamado)
+             * @example 442037691881
+             */
+            to?: number;
+        };
+        ZadarmaStatsResponse: {
+            /**
+             * @description Fecha de fin del periodo consultado
+             * @example 2015-06-29 13:45:23
+             */
+            end?: string;
+            /**
+             * @description Fecha de inicio del periodo consultado
+             * @example 2015-06-01 00:00:00
+             */
+            start?: string;
+            /** @description Lista de registros de llamadas */
+            stats?: components["schemas"]["ZadarmaCallRecord"][];
+            /**
+             * @description Estado de la respuesta
+             * @example success
+             */
+            status?: string;
         };
     };
     responses: never;
@@ -1601,6 +1733,71 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseTelegramLinkResponse"];
+                };
+            };
+        };
+    };
+    getCallsSummary: {
+        parameters: {
+            query?: {
+                /** @description Fin del periodo (YYYY-MM-DD HH:MM:SS) */
+                end?: string;
+                /** @description Filtrar por número SIP (opcional) */
+                sip?: string;
+                /** @description Inicio del periodo (YYYY-MM-DD HH:MM:SS) */
+                start?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estadísticas obtenidas correctamente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaStatsResponse"];
+                };
+            };
+            /** @description Error en la comunicación con la API de Zadarma */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaStatsResponse"];
+                };
+            };
+        };
+    };
+    getSips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lista de SIPs obtenida correctamente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListSipInfoResponse"];
+                };
+            };
+            /** @description Error en la comunicación con la API de Zadarma */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseListSipInfoResponse"];
                 };
             };
         };

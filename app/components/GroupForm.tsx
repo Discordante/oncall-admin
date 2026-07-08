@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useForm, Controller, type UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "~/components/ui/Button";
-import { Select, assignChipColors } from "~/components/ui/Select";
+import { Select, assignChipColors, type SelectOption } from "~/components/ui/Select";
 
 // ---------------------------------------------------------------------------
 // Zod schema — form fields use string for number inputs
@@ -73,6 +73,13 @@ interface ApplicationItem {
   name?: string;
 }
 
+/** Un SIP de Zadarma con su estado de asignación. Campos opcionales para coincidir con SipInfoResponse del schema. */
+export interface SipOption {
+  sipId?: string;
+  /** Nombre del grupo que ya usa este SIP, o null si está libre. */
+  groupName?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -92,6 +99,10 @@ export interface GroupFormProps {
   telegramGroupInviteLink?: string;
   /** When true, Cancel & Save buttons are hidden until the user modifies a field (edit mode) */
   hideActionsWhenPristine?: boolean;
+  /** Lista de SIPs de Zadarma disponibles. Si no se provee, se muestra un input de texto. */
+  sipOptions?: SipOption[];
+  /** Nombre del grupo actual (para no deshabilitar su propio SIP en el select). */
+  currentGroupName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +186,8 @@ export function GroupForm({
   cancelTo = "/grupos",
   telegramGroupInviteLink,
   hideActionsWhenPristine = false,
+  sipOptions,
+  currentGroupName,
 }: GroupFormProps) {
   const {
     register,
@@ -205,6 +218,10 @@ export function GroupForm({
   const [serverError, setServerError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Accordion state for expand/collapse (separate from enable/disable toggle)
+  const [telegramExpanded, setTelegramExpanded] = useState(defaultValues?.telegramBotEnabled ?? false);
+  const [zadarmaExpanded, setZadarmaExpanded] = useState(defaultValues?.zadarmaEnabled ?? false);
+
   // Build coloured options once
   const peopleOptions = assignChipColors(
     people.map((p) => ({
@@ -219,6 +236,23 @@ export function GroupForm({
       label: a.name ?? "",
     }))
   );
+
+  // Build SIP select options
+  const sipSelectOptions = useMemo<SelectOption[]>(() => {
+    if (!sipOptions) return [];
+    return sipOptions.map((sip) => {
+      const sipId = sip.sipId ?? "";
+      const groupName = sip.groupName ?? null;
+      return {
+        value: sipId,
+        label:
+          groupName && groupName !== currentGroupName
+            ? `${sipId} (${groupName})`
+            : sipId,
+        disabled: groupName !== null && groupName !== currentGroupName,
+      };
+    });
+  }, [sipOptions, currentGroupName]);
 
   const onFormSubmit = async (data: GroupFormData) => {
     setServerError(null);
@@ -283,32 +317,35 @@ export function GroupForm({
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">
             Configuración Zadarma
           </h3>
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              {...register("zadarmaEnabled")}
-              className="peer sr-only"
-            />
-            <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-          </label>
-        </div>
-        {zadarmaEnabled && (
-          <div className="mt-4 space-y-4">
-            <div>
-              <label htmlFor="zadarmaSipId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                ID del SIP
-              </label>
+          <div className="flex items-center gap-2">
+            <label className="relative inline-flex cursor-pointer items-center">
               <input
-                id="zadarmaSipId"
-                type="text"
-                {...register("zadarmaSipId")}
-                className={inputCls}
-                placeholder="Ej: 921495"
+                type="checkbox"
+                {...register("zadarmaEnabled")}
+                className="peer sr-only"
               />
-              {errors.zadarmaSipId && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.zadarmaSipId.message}</p>
-              )}
-            </div>
+              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
+            </label>
+            <button
+              type="button"
+              onClick={() => setZadarmaExpanded((prev) => !prev)}
+              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              aria-label={zadarmaExpanded ? "Colapsar" : "Expandir"}
+            >
+              <svg
+                className={`h-4 w-4 transition-transform ${zadarmaExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        {zadarmaExpanded && (
+          <div className="mt-4 space-y-4">
             <Controller
               control={control}
               name="zadarmaRedirectionType"
@@ -317,10 +354,28 @@ export function GroupForm({
                   label="Tipo de redirección"
                   options={[
                     { value: "sip", label: "SIP" },
-                    { value: "pbx", label: "PBX" },
+                    { value: "pbx", label: "PBX", disabled: true },
                   ]}
                   value={field.value}
                   onChange={(val) => field.onChange(val)}
+                />
+              )}
+            />
+            <Controller
+              control={control}
+              name="zadarmaSipId"
+              render={({ field }) => (
+                <Select
+                  label="ID del SIP"
+                  placeholder={sipOptions ? "Seleccionar SIP..." : "Ej: 921495"}
+                  options={
+                    sipOptions
+                      ? sipSelectOptions
+                      : [{ value: field.value || "", label: field.value || "Sin SIPs cargados" }]
+                  }
+                  value={field.value}
+                  onChange={(val) => field.onChange(val)}
+                  error={errors.zadarmaSipId?.message}
                 />
               )}
             />
@@ -334,16 +389,34 @@ export function GroupForm({
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">
             Integración Telegram
           </h3>
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              {...register("telegramBotEnabled")}
-              className="peer sr-only"
-            />
-            <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                {...register("telegramBotEnabled")}
+                className="peer sr-only"
+              />
+              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
+            </label>
+            <button
+              type="button"
+              onClick={() => setTelegramExpanded((prev) => !prev)}
+              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              aria-label={telegramExpanded ? "Colapsar" : "Expandir"}
+            >
+              <svg
+                className={`h-4 w-4 transition-transform ${telegramExpanded ? "rotate-180" : ""}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
         </div>
-        {telegramBotEnabled && (
+        {telegramExpanded && (
           <div className="mt-4 space-y-4">
             <PasswordField
               id="telegramBotToken"

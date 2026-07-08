@@ -9,14 +9,16 @@ import type { GroupFormData } from "~/components/GroupForm";
 // clientLoader — load people and applications for the form selects
 // ---------------------------------------------------------------------------
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const [peopleRes, appsRes] = await Promise.all([
+  const [peopleRes, appsRes, sipsRes] = await Promise.all([
     api.GET("/api/v1/people", { params: { query: { includeInactive: true } } }),
     api.GET("/api/v1/applications"),
+    api.GET("/api/v1/zadarma/sips"),
   ]);
 
   return {
     people: peopleRes.data?.data ?? [],
     applications: appsRes.data?.data ?? [],
+    sips: sipsRes.data?.data ?? [],
   };
 }
 
@@ -24,7 +26,7 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
 // Component
 // ---------------------------------------------------------------------------
 export default function NewGroup() {
-  const { people, applications } = useLoaderData<typeof clientLoader>();
+  const { people, applications, sips } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -81,6 +83,7 @@ export default function NewGroup() {
         applications={applications}
         onSubmit={onSubmit}
         submitLabel="Crear grupo"
+        sipOptions={sips}
       />
     </div>
   );
