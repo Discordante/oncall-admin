@@ -316,6 +316,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/zadarma/direct-numbers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Números virtuales
+         * @description Obtiene la información sobre los números virtuales (directos) contratados en la cuenta de Zadarma. El conjunto de campos puede variar según el tipo de número. Posibles estados: on, parking, checking, checking_upload, reserved_on, reserved_checking, reserved_checking_upload. Posibles tipos: common (virtual), rufree (Moscú gratuito), order (reservado sin conectar).
+         */
+        get: operations["getDirectNumbers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/zadarma/sip-redirections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reenvíos SIP
+         * @description Obtiene la configuración actual de reenvío de llamadas (redirección) para todos los números SIP de la cuenta, o filtrado por un SIP concreto
+         */
+        get: operations["getSipRedirections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/zadarma/sips": {
         parameters: {
             query?: never;
@@ -445,6 +485,20 @@ export interface components {
             errors?: components["schemas"]["ValidationError"][];
         };
         /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseZadarmaDirectNumbersResponse: {
+            /** @description Datos de la respuesta */
+            data?: components["schemas"]["ZadarmaDirectNumbersResponse"];
+            /** @description Lista de errores, si los hay */
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseZadarmaSipRedirectionResponse: {
+            /** @description Datos de la respuesta */
+            data?: components["schemas"]["ZadarmaSipRedirectionResponse"];
+            /** @description Lista de errores, si los hay */
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
         ApiResponseZadarmaStatsResponse: {
             /** @description Datos de la respuesta */
             data?: components["schemas"]["ZadarmaStatsResponse"];
@@ -566,6 +620,90 @@ export interface components {
              */
             totalHours?: number;
         };
+        DirectNumberInfo: {
+            /**
+             * @description Indica si está activada la renovación automática del número
+             * @example true
+             */
+            autorenew?: string;
+            /**
+             * Format: int32
+             * @description Número de líneas (canales) del número
+             * @example 2
+             */
+            channels?: number;
+            /**
+             * @description País del número
+             * @example United Kingdom
+             */
+            country?: string;
+            /**
+             * @description Moneda del coste
+             * @example USD
+             */
+            currency?: string;
+            /**
+             * @description Descripción: ciudad o tipo
+             * @example London
+             */
+            description?: string;
+            /**
+             * @description Indica si el número está en fase de pruebas
+             * @example false
+             */
+            is_on_test?: string;
+            /**
+             * Format: int32
+             * @description Duración total de llamadas entrantes en el mes actual (solo para revenue)
+             * @example 120
+             */
+            minutes?: number;
+            /**
+             * @description Coste mensual del número
+             * @example 2
+             */
+            monthly_fee?: number;
+            /**
+             * @description Número comprado por el usuario
+             * @example 442030000000
+             */
+            number?: string;
+            /**
+             * @description Nombre del número virtual definido por el usuario
+             * @example Soporte
+             */
+            number_name?: string;
+            /**
+             * @description SIP vinculado al número
+             * @example 00001
+             */
+            sip?: string;
+            /**
+             * @description Nombre del SIP vinculado al número
+             * @example SIP principal
+             */
+            sip_name?: string;
+            /**
+             * @description Fecha de compra del número (YYYY-MM-DD HH:MM:SS)
+             * @example 2015-01-01 18:14:44
+             */
+            start_date?: string;
+            /**
+             * @description Estado del número: on, parking, checking, checking_upload, reserved_on, reserved_checking, reserved_checking_upload
+             * @example on
+             */
+            status?: string;
+            /**
+             * @description Fecha de fin del periodo de pago (YYYY-MM-DD HH:MM:SS)
+             * @example 2026-02-11 18:14:40
+             */
+            stop_date?: string;
+            /**
+             * @description Tipo de número: common (virtual), rufree (Moscow gratuito), order (reservado sin conectar)
+             * @example common
+             */
+            type?: string;
+        };
         /** @description Resultado de la generación automática de turnos de guardia */
         GenerateShiftsResponse: {
             /**
@@ -620,6 +758,11 @@ export interface components {
             telegramBotToken?: string;
             /** @description ID del chat/grupo de Telegram donde opera el bot (opcional) */
             telegramGroupChatId?: string;
+            /**
+             * @description Activa o desactiva la redirección de llamadas (opcional, por defecto true)
+             * @example true
+             */
+            zadarmaActive?: boolean;
             /**
              * @description Tipo de redirección: 'sip' o 'pbx' (opcional, por defecto 'sip')
              * @example sip
@@ -685,6 +828,11 @@ export interface components {
              * @example 2026-06-27T10:30:00Z
              */
             updatedAt?: string;
+            /**
+             * @description Indica si la redirección de llamadas está activa
+             * @example true
+             */
+            zadarmaActive?: boolean;
             /**
              * @description Tipo de redirección: 'sip' o 'pbx'
              * @example sip
@@ -765,6 +913,33 @@ export interface components {
              * @example 2026-06-27T10:30:00Z
              */
             updatedAt?: string;
+        };
+        RedirectionInfo: {
+            /**
+             * @description Condición de reenvío: always (por defecto) o unavailable
+             * @example always
+             */
+            condition?: string;
+            /**
+             * @description Destino del desvío: phone o pbx
+             * @example phone
+             */
+            destination?: string;
+            /**
+             * @description Número de desvío: teléfono o ID de centralita virtual
+             * @example 442037691880
+             */
+            destination_value?: string;
+            /**
+             * @description ID del SIP del usuario
+             * @example 00001
+             */
+            sip_id?: string;
+            /**
+             * @description Estado actual: on u off
+             * @example on
+             */
+            status?: string;
         };
         /** @description Solicitud para crear o actualizar un turno de guardia */
         ShiftRequest: {
@@ -943,6 +1118,24 @@ export interface components {
              * @example 442037691881
              */
             to?: number;
+        };
+        ZadarmaDirectNumbersResponse: {
+            /** @description Lista de números virtuales del usuario */
+            info?: components["schemas"]["DirectNumberInfo"][];
+            /**
+             * @description Estado de la respuesta de la API
+             * @example success
+             */
+            status?: string;
+        };
+        ZadarmaSipRedirectionResponse: {
+            /** @description Lista de configuraciones de reenvío por SIP */
+            info?: components["schemas"]["RedirectionInfo"][];
+            /**
+             * @description Estado de la respuesta
+             * @example success
+             */
+            status?: string;
         };
         ZadarmaStatsResponse: {
             /**
@@ -1769,6 +1962,67 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ApiResponseZadarmaStatsResponse"];
+                };
+            };
+        };
+    };
+    getDirectNumbers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Números virtuales obtenidos correctamente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaDirectNumbersResponse"];
+                };
+            };
+            /** @description Error en la comunicación con la API de Zadarma */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaDirectNumbersResponse"];
+                };
+            };
+        };
+    };
+    getSipRedirections: {
+        parameters: {
+            query?: {
+                /** @description ID de SIP específico (opcional). Si no se indica, se devuelven todos los SIP */
+                id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reenvíos obtenidos correctamente */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaSipRedirectionResponse"];
+                };
+            };
+            /** @description Error en la comunicación con la API de Zadarma */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApiResponseZadarmaSipRedirectionResponse"];
                 };
             };
         };

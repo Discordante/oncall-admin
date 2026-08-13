@@ -1,26 +1,122 @@
 import { useLoaderData, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/_protected.groups";
 import { api } from "~/lib/api";
+import type { components } from "~/lib/api";
 import { Button } from "~/components/ui/Button";
 
+type GroupData = components["schemas"]["OnCallGroupResponse"];
+
 // ---------------------------------------------------------------------------
-// clientLoader
+// clientLoader – fetches groups + health data in parallel
 // ---------------------------------------------------------------------------
 export async function clientLoader({ request }: Route.ClientLoaderArgs) {
-  const { data, error } = await api.GET("/api/v1/on-call-groups");
+  const [groupsRes, numbersRes, redirRes] = await Promise.all([
+    api.GET("/api/v1/on-call-groups"),
+    api.GET("/api/v1/zadarma/direct-numbers"),
+    api.GET("/api/v1/zadarma/sip-redirections"),
+  ]);
 
-  if (error) {
+  if (groupsRes.error) {
     throw new Error("Error al cargar grupos de guardia");
   }
 
-  return { groups: data?.data ?? [] };
+  const groups = groupsRes.data?.data ?? [];
+  const allNumbers = numbersRes.data?.data?.info ?? [];
+  const allRedirections = redirRes.data?.data?.info ?? [];
+
+  /** Build health info for each group */
+  const groupHealth = new Map<string, { sipOk: boolean; numbersOk: boolean; expiringSoon: boolean }>();
+
+  for (const g of groups) {
+    const sip = g.zadarmaSipId;
+    if (!sip) {
+      groupHealth.set(g.id!, { sipOk: false, numbersOk: false, expiringSoon: false });
+      continue;
+    }
+
+    // SIP health: active redirection exists for this SIP
+    const hasActiveRedir = allRedirections.some((r) => r.sip_id === sip && r.status === "on");
+    const hasAnyRedir = allRedirections.some((r) => r.sip_id === sip);
+
+    // Numbers health for this SIP
+    const sipNumbers = allNumbers.filter((n) => n.sip === sip);
+    const activeNumbers = sipNumbers.filter((n) => n.status === "on");
+    const nowMs = Date.now();
+    const expiringSoon = activeNumbers.some((n) => {
+      if (!n.stop_date) return false;
+      try {
+        const stop = new Date(n.stop_date.replace(" ", "T")).getTime();
+        return (stop - nowMs) / 86400000 <= 15 && (stop - nowMs) >= 0;
+      } catch { return false; }
+    });
+
+    groupHealth.set(g.id!, {
+      sipOk: hasActiveRedir,
+      numbersOk: activeNumbers.length > 0,
+      expiringSoon,
+    });
+  }
+
+  return { groups, groupHealth: Object.fromEntries(groupHealth) };
+}
+
+// ---------------------------------------------------------------------------
+// Health icon components
+// ---------------------------------------------------------------------------
+function SipStatusIcon({ ok }: { ok: boolean }) {
+  return ok ? (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" title="SIP configurado y con reenvío activo">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
+      SIP
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400" title="SIP sin reenvío activo o no configurado">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+      </svg>
+      SIP
+    </span>
+  );
+}
+
+function NumbersStatusIcon({ ok, expiring }: { ok: boolean; expiring: boolean }) {
+  if (ok && expiring) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400" title="Números activos pero próximos a caducar">
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9.75-.75a9 9 0 1 1-9-9 9.75 9.75 0 0 1 9 9Z" />
+        </svg>
+        Nº
+      </span>
+    );
+  }
+  if (ok) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" title="Números activos y sin caducidad próxima">
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        Nº
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-red-500 dark:text-red-400" title="Sin números activos para este SIP">
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
+      Nº
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 export default function GroupsList() {
-  const { groups } = useLoaderData<typeof clientLoader>();
+  const { groups, groupHealth } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
 
   const handleDelete = async (id: string, name: string) => {
@@ -88,15 +184,14 @@ export default function GroupsList() {
                     <h3 className="truncate text-base font-semibold text-gray-900 dark:text-white">
                       {group.name}
                     </h3>
-                    {group.grossPricePerDay != null && (
-                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                        {group.grossPricePerDay.toLocaleString("es-ES", {
-                          style: "currency",
-                          currency: "EUR",
-                        })}
-                        /día
-                      </p>
-                    )}
+                    {/* Health indicators */}
+                    <div className="mt-2 flex items-center gap-3">
+                      <SipStatusIcon ok={groupHealth[group.id!]?.sipOk ?? false} />
+                      <NumbersStatusIcon
+                        ok={groupHealth[group.id!]?.numbersOk ?? false}
+                        expiring={groupHealth[group.id!]?.expiringSoon ?? false}
+                      />
+                    </div>
                   </div>
                 </div>
 

@@ -74,7 +74,17 @@ function formatDuration(billseconds?: number): string {
 
 function formatPhone(num?: number): string {
   if (num == null) return "—";
-  return String(num);
+  const digits = String(num).replace(/\D/g, "");
+  if (!digits) return "—";
+  // Group from right in chunks of 3, prefix with +
+  const parts: string[] = [];
+  let remaining = digits;
+  while (remaining.length > 3) {
+    parts.unshift(remaining.slice(-3));
+    remaining = remaining.slice(0, -3);
+  }
+  parts.unshift(remaining);
+  return `+${parts.join(" ")}`;
 }
 
 // ---------------------------------------------------------------------------

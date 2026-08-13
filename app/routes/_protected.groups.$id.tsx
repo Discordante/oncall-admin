@@ -7,14 +7,24 @@ import type { GroupFormData } from "~/components/GroupForm";
 import { ShiftManager } from "~/components/ShiftManager";
 import { BillingTab } from "~/components/BillingTab";
 import { CallsSummaryTab } from "~/components/CallsSummaryTab";
+import { ControlPanelTab } from "~/components/ControlPanelTab";
 import { Button } from "~/components/ui/Button";
 
 // ---------------------------------------------------------------------------
 // Tab configuration
 // ---------------------------------------------------------------------------
-type TabId = "info" | "shifts" | "billing" | "calls";
+type TabId = "dashboard" | "info" | "shifts" | "billing" | "calls";
 
 const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  {
+    id: "dashboard",
+    label: "Panel de control",
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
+      </svg>
+    ),
+  },
   {
     id: "info",
     label: "Información",
@@ -83,7 +93,7 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 export default function GroupDashboard() {
   const { group, people, applications, sips } = useLoaderData<typeof clientLoader>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<TabId>("info");
+  const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [serverError, setServerError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -215,6 +225,11 @@ export default function GroupDashboard() {
       )}
 
       {/* ── Tab content ── */}
+      {/* Dashboard tab */}
+      {activeTab === "dashboard" && (
+        <ControlPanelTab sipId={group.zadarmaSipId} groupId={group.id} groupPeople={groupPeople} />
+      )}
+
       {/* Info tab: hidden instead of unmounted to preserve form state */}
       <div className={activeTab === "info" ? "" : "hidden"}>
         <div className="max-w-2xl space-y-6">
