@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
+import { formatDuration } from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -57,18 +58,6 @@ function formatCurrency(val?: number): string {
 /** Escapes a CSV cell value when needed */
 function csvEscape(value: string): string {
   return /[;"\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-/** Formats total hours as "x días y x horas" (omitting zero parts) */
-function formatDuration(totalHours?: number): string {
-  if (totalHours == null) return "—";
-  const rounded = Math.round(totalHours);
-  const days = Math.floor(rounded / 24);
-  const hours = rounded % 24;
-
-  if (days === 0) return `${hours} hora${hours === 1 ? "" : "s"}`;
-  if (hours === 0) return `${days} día${days === 1 ? "" : "s"}`;
-  return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +223,11 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
                   <p className="text-xl font-bold text-gray-900 dark:text-white">
                     {billing.totalHours != null ? `${Math.round(billing.totalHours)}h` : "—"}
                   </p>
+                  {billing.totalHours != null && (
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                      {formatDuration(billing.totalHours)}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

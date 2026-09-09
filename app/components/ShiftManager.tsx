@@ -3,6 +3,7 @@ import { DateTime } from "luxon";
 import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
+import { formatDuration } from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -132,20 +133,14 @@ const statusBadge: Record<ShiftStatus, { label: string; cls: string; ping: boole
   },
 };
 
-/** Duración de un turno en formato "x días y x horas" (omitiendo partes a cero) */
+/** Duración de un turno usando el formateo compartido "x días y x horas" */
 function formatShiftDuration(startTime?: string, endTime?: string): string {
   if (!startTime || !endTime) return "—";
   const start = DateTime.fromISO(startTime, { zone: TZ });
   const end = DateTime.fromISO(endTime, { zone: TZ });
   if (!start.isValid || !end.isValid || end <= start) return "—";
 
-  const totalHours = Math.round(end.diff(start, "hours").hours);
-  const days = Math.floor(totalHours / 24);
-  const hours = totalHours % 24;
-
-  if (days === 0) return `${hours} hora${hours === 1 ? "" : "s"}`;
-  if (hours === 0) return `${days} día${days === 1 ? "" : "s"}`;
-  return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
+  return formatDuration(end.diff(start, "hours").hours);
 }
 
 // ---------------------------------------------------------------------------
