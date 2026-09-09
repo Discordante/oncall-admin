@@ -48,7 +48,15 @@ function endOfMonth(): string {
 
 function formatCurrency(val?: number): string {
   if (val == null) return "—";
-  return val.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+  return `${val.toLocaleString("es-ES", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} €`;
+}
+
+/** Escapes a CSV cell value when needed */
+function csvEscape(value: string): string {
+  return /[;"\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 function formatNumber(val?: number, decimals = 2): string {
@@ -103,6 +111,33 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
 
   const details = billing?.details ?? [];
   const activePeople = groupPeople.filter((p) => p.id && p.name);
+
+  // ── CSV download (same data shown in the details table) ──
+  const downloadCsv = () => {
+    const rows = [
+      ["Persona", "Email", "Días", "Horas", "Facturación"],
+      ...details.map((d) => [
+        d.personName ?? "",
+        d.personEmail ?? "",
+        d.totalDays != null ? formatNumber(d.totalDays, 2) : "",
+        d.totalHours != null ? String(Math.round(d.totalHours)) : "",
+        d.totalBilling != null ? formatCurrency(d.totalBilling) : "",
+      ]),
+    ];
+
+    // BOM + semicolon separator for correct Excel (es-ES) opening
+    const csv = "\uFEFF" + rows.map((r) => r.map(csvEscape).join(";")).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `facturacion_${dateFrom}_${dateTo}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="space-y-6">
@@ -190,7 +225,7 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
                 <div>
                   <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Total horas</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {formatNumber(billing.totalHours, 1)}h
+                    {billing.totalHours != null ? `${Math.round(billing.totalHours)}h` : "—"}
                   </p>
                 </div>
               </div>
@@ -232,10 +267,23 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
           {/* ── Details table ── */}
           {details.length > 0 && (
             <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-              <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+              <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-700">
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">
                   Desglose por persona
                 </h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={downloadCsv}
+                  leftIcon={
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                  }
+                >
+                  Descargar CSV
+                </Button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -261,7 +309,7 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
                           {formatNumber(d.totalDays, 2)}
                         </td>
                         <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-400">
-                          {formatNumber(d.totalHours, 1)}h
+                          {d.totalHours != null ? `${Math.round(d.totalHours)}h` : "—"}
                         </td>
                         <td className="px-6 py-3 text-right font-medium text-gray-900 dark:text-white">
                           {formatCurrency(d.totalBilling)}
