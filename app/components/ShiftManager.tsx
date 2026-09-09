@@ -132,7 +132,7 @@ const statusBadge: Record<ShiftStatus, { label: string; cls: string; ping: boole
   },
 };
 
-/** Duración de un turno en formato "x días y x horas" */
+/** Duración de un turno en formato "x días y x horas" (omitiendo partes a cero) */
 function formatShiftDuration(startTime?: string, endTime?: string): string {
   if (!startTime || !endTime) return "—";
   const start = DateTime.fromISO(startTime, { zone: TZ });
@@ -143,6 +143,8 @@ function formatShiftDuration(startTime?: string, endTime?: string): string {
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
 
+  if (days === 0) return `${hours} hora${hours === 1 ? "" : "s"}`;
+  if (hours === 0) return `${days} día${days === 1 ? "" : "s"}`;
   return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
 }
 

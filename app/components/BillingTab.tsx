@@ -59,13 +59,15 @@ function csvEscape(value: string): string {
   return /[;"\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** Formats total hours as "x días y x horas" */
+/** Formats total hours as "x días y x horas" (omitting zero parts) */
 function formatDuration(totalHours?: number): string {
   if (totalHours == null) return "—";
   const rounded = Math.round(totalHours);
   const days = Math.floor(rounded / 24);
   const hours = rounded % 24;
 
+  if (days === 0) return `${hours} hora${hours === 1 ? "" : "s"}`;
+  if (hours === 0) return `${days} día${days === 1 ? "" : "s"}`;
   return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
 }
 
