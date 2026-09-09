@@ -132,6 +132,20 @@ const statusBadge: Record<ShiftStatus, { label: string; cls: string; ping: boole
   },
 };
 
+/** Duración de un turno en formato "x días y x horas" */
+function formatShiftDuration(startTime?: string, endTime?: string): string {
+  if (!startTime || !endTime) return "—";
+  const start = DateTime.fromISO(startTime, { zone: TZ });
+  const end = DateTime.fromISO(endTime, { zone: TZ });
+  if (!start.isValid || !end.isValid || end <= start) return "—";
+
+  const totalHours = Math.round(end.diff(start, "hours").hours);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
+}
+
 // ---------------------------------------------------------------------------
 // Overlap detection
 // ---------------------------------------------------------------------------
@@ -674,6 +688,7 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
                   <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Persona</th>
                   <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Inicio</th>
                   <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Fin</th>
+                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Tiempo</th>
                   <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-24">Estado</th>
                   <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-20" />
                 </tr>
@@ -695,6 +710,9 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
                       </td>
                       <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
                         {formatDate(shift.endTime)}
+                      </td>
+                      <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                        {formatShiftDuration(shift.startTime, shift.endTime)}
                       </td>
                       <td className="px-6 py-3">
                         <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>

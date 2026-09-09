@@ -59,9 +59,14 @@ function csvEscape(value: string): string {
   return /[;"\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function formatNumber(val?: number, decimals = 2): string {
-  if (val == null) return "—";
-  return val.toLocaleString("es-ES", { minimumFractionDigits: 0, maximumFractionDigits: decimals });
+/** Formats total hours as "x días y x horas" */
+function formatDuration(totalHours?: number): string {
+  if (totalHours == null) return "—";
+  const rounded = Math.round(totalHours);
+  const days = Math.floor(rounded / 24);
+  const hours = rounded % 24;
+
+  return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +120,11 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
   // ── CSV download (same data shown in the details table) ──
   const downloadCsv = () => {
     const rows = [
-      ["Persona", "Email", "Días", "Horas", "Facturación"],
+      ["Persona", "Email", "Tiempo", "Horas totales", "Facturación"],
       ...details.map((d) => [
         d.personName ?? "",
         d.personEmail ?? "",
-        d.totalDays != null ? formatNumber(d.totalDays, 2) : "",
+        formatDuration(d.totalHours),
         d.totalHours != null ? String(Math.round(d.totalHours)) : "",
         d.totalBilling != null ? formatCurrency(d.totalBilling) : "",
       ]),
@@ -291,8 +296,8 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
                     <tr className="border-b border-gray-200 text-left dark:border-gray-700">
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Persona</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Email</th>
-                      <th className="px-6 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Días</th>
-                      <th className="px-6 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Horas</th>
+                      <th className="px-6 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Tiempo</th>
+                      <th className="px-6 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Horas totales</th>
                       <th className="px-6 py-3 text-right font-medium text-gray-500 dark:text-gray-400">Facturación</th>
                     </tr>
                   </thead>
@@ -306,7 +311,7 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
                           {d.personEmail ?? "—"}
                         </td>
                         <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-400">
-                          {formatNumber(d.totalDays, 2)}
+                          {formatDuration(d.totalHours)}
                         </td>
                         <td className="px-6 py-3 text-right text-gray-600 dark:text-gray-400">
                           {d.totalHours != null ? `${Math.round(d.totalHours)}h` : "—"}

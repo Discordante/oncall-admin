@@ -1,6 +1,7 @@
 import { redirect, useSearchParams } from "react-router";
 import type { Route } from "./+types/login";
 import { getPayload, getBackendAuthUrl } from "~/lib/auth";
+import pkg from "../../package.json";
 
 // ---------------------------------------------------------------------------
 // clientLoader – if the user already has a valid JWT, go to the dashboard.
@@ -82,6 +83,10 @@ export default function Login() {
         <p className="mt-4 text-center text-xs text-gray-400 dark:text-gray-500">
           Solo cuentas @nextdigital.es
         </p>
+      </div>
+
+      <div className="fixed bottom-2 right-3 select-none text-xs text-gray-400 dark:text-gray-600">
+        v{pkg.version}
       </div>
     </div>
   );
