@@ -29,7 +29,7 @@ function getErrorMessage(err: unknown, fallback: string): string {
 
 export interface ShiftManagerProps {
   groupId: string;
-  people: { id?: string; name?: string }[];
+  people: { id?: string; name?: string; phoneNumber?: string }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -467,7 +467,8 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
   // ── Shared form fields for create & edit (labels inline) ──
   const peopleOptions = activePeople.map((p) => ({
     value: p.id!,
-    label: p.name ?? "",
+    label: p.phoneNumber ? (p.name ?? "") : `${p.name ?? ""} — sin teléfono`,
+    disabled: !p.phoneNumber,
   }));
 
   const renderShiftForm = (

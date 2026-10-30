@@ -10,7 +10,8 @@ import { Button } from "~/components/ui/Button";
 // ---------------------------------------------------------------------------
 // Zod schema
 // ---------------------------------------------------------------------------
-const phoneRegex = /^(\+\d{1,3}[-.\s]?)?\d{6,14}$/;
+// Digits only, country code included, no + or separators (e.g. 34638407212)
+const phoneRegex = /^\d{9,15}$/;
 
 const personSchema = z.object({
   name: z.string()
@@ -20,7 +21,7 @@ const personSchema = z.object({
     .min(1, "El email es obligatorio")
     .email("Email inválido"),
   phoneNumber: z.string()
-    .regex(phoneRegex, "Número de teléfono inválido. Ej: +34612345678")
+    .regex(phoneRegex, "Solo dígitos con prefijo de país. Ej: 34612345678")
     .or(z.literal("")),
   isActive: z.boolean(),
 });
@@ -203,8 +204,9 @@ export default function EditPerson() {
                 type="text"
                 {...register("phoneNumber")}
                 className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                placeholder="Ej: +34 612 345 678"
+                placeholder="Ej: 34612345678"
               />
+              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Solo dígitos, prefijo de país incluido (sin + ni espacios)</p>
               {errors.phoneNumber && (
                 <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.phoneNumber.message}</p>
               )}
