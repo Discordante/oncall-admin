@@ -46,30 +46,31 @@ const inputCls =
   "dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500";
 
 // ---------------------------------------------------------------------------
-// Edit Modal
+// Incident Modal (create + edit)
 // ---------------------------------------------------------------------------
-interface EditModalProps {
-  incident: IncidentResponse;
+interface IncidentModalProps {
+  incident: IncidentResponse | null; // null = create mode
   applications: ApplicationResponse[];
-  onSave: (id: string, req: IncidentRequest) => Promise<string | null>;
+  onSave: (id: string | null, req: IncidentRequest) => Promise<string | null>;
   onClose: () => void;
 }
 
-function EditModal({ incident, applications, onSave, onClose }: EditModalProps) {
-  const [title, setTitle] = useState(incident.title ?? "");
-  const [description, setDescription] = useState(incident.description ?? "");
-  const [bridgeOpened, setBridgeOpened] = useState(incident.bridgeOpened ?? false);
-  const [applicationId, setApplicationId] = useState(incident.applicationId ?? "");
+function IncidentModal({ incident, applications, onSave, onClose }: IncidentModalProps) {
+  const isCreate = incident === null;
+  const [title, setTitle] = useState(incident?.title ?? "");
+  const [description, setDescription] = useState(incident?.description ?? "");
+  const [bridgeOpened, setBridgeOpened] = useState(incident?.bridgeOpened ?? false);
+  const [applicationId, setApplicationId] = useState(incident?.applicationId ?? "");
   const [endedAt, setEndedAt] = useState(
-    incident.endedAt ? incident.endedAt.slice(0, 16) : ""
+    incident?.endedAt ? incident.endedAt.slice(0, 16) : ""
   );
   const [startedAt, setStartedAt] = useState(
-    incident.startedAt ? incident.startedAt.slice(0, 16) : ""
+    incident?.startedAt ? incident.startedAt.slice(0, 16) : ""
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hasLinkedCalls = (incident.linkedCallsCount ?? 0) > 0;
+  const hasLinkedCalls = (incident?.linkedCallsCount ?? 0) > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +78,7 @@ function EditModal({ incident, applications, onSave, onClose }: EditModalProps) 
     if (!applicationId) { setError("La aplicación es obligatoria"); return; }
     setSaving(true);
     setError(null);
-    const err = await onSave(incident.id!, {
+    const err = await onSave(incident?.id ?? null, {
       title: title.trim(),
       description: description || undefined,
       applicationId,
@@ -94,7 +95,9 @@ function EditModal({ incident, applications, onSave, onClose }: EditModalProps) 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-xl bg-white shadow-xl dark:bg-gray-900">
         <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Editar incidencia</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
+            {isCreate ? "Nueva incidencia" : "Editar incidencia"}
+          </h2>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4 p-6">
           <div>
@@ -168,7 +171,7 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
   const [appFilter, setAppFilter] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<IncidentResponse | null>(null);
+  const [modalIncident, setModalIncident] = useState<IncidentResponse | null | undefined>(undefined); // undefined=closed, null=create, IncidentResponse=edit
   const [deleting, setDeleting] = useState<string | null>(null);
   const [resolving, setResolving] = useState<string | null>(null);
 
@@ -199,12 +202,19 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
 
   useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
-  const handleSave = async (id: string, req: IncidentRequest): Promise<string | null> => {
-    const { error: apiErr } = await api.PUT("/api/v1/incidents/{id}", {
-      params: { path: { id } },
-      body: req,
-    });
-    if (apiErr) return getApiError(apiErr, "Error al guardar la incidencia");
+  const handleSave = async (id: string | null, req: IncidentRequest): Promise<string | null> => {
+    if (id === null) {
+      // create
+      const { error: apiErr } = await api.POST("/api/v1/incidents", { body: req });
+      if (apiErr) return getApiError(apiErr, "Error al crear la incidencia");
+    } else {
+      // update
+      const { error: apiErr } = await api.PUT("/api/v1/incidents/{id}", {
+        params: { path: { id } },
+        body: req,
+      });
+      if (apiErr) return getApiError(apiErr, "Error al guardar la incidencia");
+    }
     await fetchIncidents();
     return null;
   };
@@ -241,7 +251,7 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* ── Filters ── */}
+      {/* ── Filters + New button ── */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900">
         <div className="min-w-0 flex-1 sm:flex-none sm:w-64">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -263,6 +273,12 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182" />
           </svg>
           Actualizar
+        </Button>
+        <Button type="button" variant="primary" size="md" onClick={() => setModalIncident(null)}>
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Nueva incidencia
         </Button>
       </div>
 
@@ -385,7 +401,7 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
                         )}
                         {/* Editar */}
                         <button
-                          onClick={() => setEditing(inc)}
+                          onClick={() => setModalIncident(inc)}
                           title="Editar"
                           className="rounded p-1 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
                         >
@@ -431,13 +447,13 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
         )}
       </div>
 
-      {/* ── Edit modal ── */}
-      {editing && (
-        <EditModal
-          incident={editing}
+      {/* ── Incident modal (create / edit) ── */}
+      {modalIncident !== undefined && (
+        <IncidentModal
+          incident={modalIncident}
           applications={applications}
           onSave={handleSave}
-          onClose={() => setEditing(null)}
+          onClose={() => setModalIncident(undefined)}
         />
       )}
     </div>
