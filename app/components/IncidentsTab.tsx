@@ -60,7 +60,10 @@ function IncidentModal({ incident, applications, onSave, onClose }: IncidentModa
   const [title, setTitle] = useState(incident?.title ?? "");
   const [description, setDescription] = useState(incident?.description ?? "");
   const [bridgeOpened, setBridgeOpened] = useState(incident?.bridgeOpened ?? false);
-  const [applicationId, setApplicationId] = useState(incident?.applicationId ?? "");
+  // Auto-select when the group has exactly one application
+  const [applicationId, setApplicationId] = useState(
+    incident?.applicationId ?? (applications.length === 1 ? (applications[0].id ?? "") : "")
+  );
   const [endedAt, setEndedAt] = useState(
     incident?.endedAt ? incident.endedAt.slice(0, 16) : ""
   );

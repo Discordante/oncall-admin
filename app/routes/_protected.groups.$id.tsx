@@ -293,7 +293,7 @@ export default function GroupDashboard() {
 
       {/* Incidents tab */}
       {activeTab === "incidents" && (
-        <IncidentsTab groupId={group.id!} applications={applications} />
+        <IncidentsTab groupId={group.id!} applications={group.applications ?? []} />
       )}
     </div>
   );
