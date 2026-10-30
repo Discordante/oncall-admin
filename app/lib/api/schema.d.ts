@@ -296,6 +296,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/incidents": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        /** Listar incidencias */
+        get: operations["findAllIncidents"];
+        put?: never;
+        /** Crear incidencia */
+        post: operations["createIncident"];
+        delete?: never; options?: never; head?: never; patch?: never; trace?: never;
+    };
+    "/api/v1/incidents/{id}": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        /** Obtener incidencia por ID */
+        get: operations["findIncidentById"];
+        /** Actualizar incidencia */
+        put: operations["updateIncident"];
+        post?: never;
+        /** Eliminar incidencia */
+        delete: operations["deleteIncident"];
+        options?: never; head?: never; patch?: never; trace?: never;
+    };
+    "/api/v1/incidents/{id}/calls/{callId}": {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        get?: never;
+        put?: never;
+        /** Vincular llamada a incidencia */
+        post: operations["linkCallToIncident"];
+        /** Desvincular llamada de incidencia */
+        delete: operations["unlinkCallFromIncident"];
+        options?: never; head?: never; patch?: never; trace?: never;
+    };
     "/api/v1/zadarma/calls-summary": {
         parameters: {
             query?: never;
@@ -305,7 +335,7 @@ export interface paths {
         };
         /**
          * Llamadas entrantes
-         * @description Obtiene el listado completo de llamadas entrantes desde Zadarma para el rango de fechas indicado, con todos los campos disponibles (id, sip, callstart, from, to, billseconds, disposition, description)
+         * @description Devuelve registros de llamadas desde BD local. Sincroniza con Zadarma si el rango no está cubierto.
          */
         get: operations["getCallsSummary"];
         put?: never;
@@ -482,6 +512,21 @@ export interface components {
             /** @description Datos de la respuesta */
             data?: components["schemas"]["TelegramLinkResponse"];
             /** @description Lista de errores, si los hay */
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseIncidentResponse: {
+            data?: components["schemas"]["IncidentResponse"];
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponseListCallRecordResponse: {
+            data?: components["schemas"]["CallRecordResponse"][];
+            errors?: components["schemas"]["ValidationError"][];
+        };
+        /** @description Envoltorio de respuesta estándar de la API */
+        ApiResponsePageIncidentResponse: {
+            data?: components["schemas"]["PageIncidentResponse"];
             errors?: components["schemas"]["ValidationError"][];
         };
         /** @description Envoltorio de respuesta estándar de la API */
@@ -1072,6 +1117,80 @@ export interface components {
              * @example El campo 'name' es obligatorio
              */
             message?: string;
+        };
+        /** @description Registro de llamada entrante persistida localmente */
+        CallRecordResponse: {
+            /** Format: uuid */
+            id?: string;
+            /** @description ID original de la llamada en Zadarma */
+            externalCallId?: string;
+            /** @description Número SIP @example 921495 */
+            sipId?: string;
+            /** Format: uuid */
+            onCallGroupId?: string;
+            onCallGroupName?: string;
+            callerNumber?: string;
+            destinationNumber?: string;
+            /** Format: date-time */
+            callStartedAt?: string;
+            /** Format: int32 */
+            billSeconds?: number;
+            disposition?: string;
+            description?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /** @description Solicitud para crear o actualizar una incidencia */
+        IncidentRequest: {
+            /** @description Título de la incidencia */
+            title: string;
+            /** Format: uuid */
+            applicationId: string;
+            description?: string;
+            bridgeOpened?: boolean;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            endedAt?: string;
+            /** @description IDs de llamadas vinculadas */
+            callRecordIds?: string[];
+        };
+        /** @description Datos de una incidencia */
+        IncidentResponse: {
+            /** Format: uuid */
+            id?: string;
+            title?: string;
+            description?: string;
+            /** Format: uuid */
+            applicationId?: string;
+            applicationName?: string;
+            bridgeOpened?: boolean;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            endedAt?: string;
+            /** Format: int64 */
+            durationSeconds?: number;
+            linkedCallsCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        /** @description Página de incidencias (Spring Data Page) */
+        PageIncidentResponse: {
+            content?: components["schemas"]["IncidentResponse"][];
+            /** Format: int64 */
+            totalElements?: number;
+            /** Format: int32 */
+            totalPages?: number;
+            /** Format: int32 */
+            size?: number;
+            /** Format: int32 */
+            number?: number;
+            first?: boolean;
+            last?: boolean;
+            empty?: boolean;
         };
         /** @description Registro individual de llamada entrante */
         ZadarmaCallRecord: {
@@ -1933,12 +2052,11 @@ export interface operations {
     getCallsSummary: {
         parameters: {
             query?: {
-                /** @description Fin del periodo (YYYY-MM-DD HH:MM:SS) */
                 end?: string;
-                /** @description Filtrar por número SIP (opcional) */
                 sip?: string;
-                /** @description Inicio del periodo (YYYY-MM-DD HH:MM:SS) */
                 start?: string;
+                /** @description Forzar sincronización ignorando el cache local */
+                force?: boolean;
             };
             header?: never;
             path?: never;
@@ -1946,24 +2064,80 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Estadísticas obtenidas correctamente */
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseZadarmaStatsResponse"];
-                };
+                headers: { [name: string]: unknown; };
+                content: { "*/*": components["schemas"]["ApiResponseListCallRecordResponse"]; };
             };
-            /** @description Error en la comunicación con la API de Zadarma */
             502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApiResponseZadarmaStatsResponse"];
-                };
+                headers: { [name: string]: unknown; };
+                content: { "*/*": components["schemas"]["ApiResponseListCallRecordResponse"]; };
             };
+        };
+    };
+    findAllIncidents: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+                sort?: string[];
+                applicationId?: string;
+            };
+            header?: never; path?: never; cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponsePageIncidentResponse"]; }; };
+        };
+    };
+    findIncidentById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: { id: string; };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+            404: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+        };
+    };
+    createIncident: {
+        parameters: { query?: never; header?: never; path?: never; cookie?: never; };
+        requestBody: { content: { "application/json": components["schemas"]["IncidentRequest"]; }; };
+        responses: {
+            201: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+            400: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+        };
+    };
+    updateIncident: {
+        parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; };
+        requestBody: { content: { "application/json": components["schemas"]["IncidentRequest"]; }; };
+        responses: {
+            200: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+            404: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+        };
+    };
+    deleteIncident: {
+        parameters: { query?: never; header?: never; path: { id: string; }; cookie?: never; };
+        requestBody?: never;
+        responses: {
+            204: { headers: { [name: string]: unknown; }; content?: never; };
+            404: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+        };
+    };
+    linkCallToIncident: {
+        parameters: { query?: never; header?: never; path: { id: string; callId: string; }; cookie?: never; };
+        requestBody?: never;
+        responses: {
+            200: { headers: { [name: string]: unknown; }; content: { "*/*": components["schemas"]["ApiResponseIncidentResponse"]; }; };
+        };
+    };
+    unlinkCallFromIncident: {
+        parameters: { query?: never; header?: never; path: { id: string; callId: string; }; cookie?: never; };
+        requestBody?: never;
+        responses: {
+            204: { headers: { [name: string]: unknown; }; content?: never; };
         };
     };
     getDirectNumbers: {

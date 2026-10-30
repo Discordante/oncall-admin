@@ -7,8 +7,7 @@ import type { components } from "~/lib/api";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type ZadarmaStatsResponse = components["schemas"]["ZadarmaStatsResponse"];
-type ZadarmaCallRecord = components["schemas"]["ZadarmaCallRecord"];
+type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 type SipInfoResponse = components["schemas"]["SipInfoResponse"];
 type ShiftRecord = components["schemas"]["ShiftResponse"];
 
@@ -46,10 +45,11 @@ function endOfMonth(): string {
 // ---------------------------------------------------------------------------
 // Formatters
 // ---------------------------------------------------------------------------
-function formatDateTime(raw?: string): string {
+function formatDateTime(raw?: string | null): string {
   if (!raw) return "—";
   try {
-    const d = new Date(raw.replace(" ", "T"));
+    // Handles both ISO 8601 (callStartedAt) and the old Zadarma format
+    const d = new Date(raw.includes("T") ? raw : raw.replace(" ", "T"));
     return d.toLocaleString("es-ES", {
       day: "2-digit",
       month: "2-digit",
@@ -72,11 +72,10 @@ function formatDuration(billseconds?: number): string {
   return `${secs}s`;
 }
 
-function formatPhone(num?: number): string {
-  if (num == null) return "—";
-  const digits = String(num).replace(/\D/g, "");
+function formatPhone(num?: string | null): string {
+  if (!num) return "—";
+  const digits = num.replace(/\D/g, "");
   if (!digits) return "—";
-  // Group from right in chunks of 3, prefix with +
   const parts: string[] = [];
   let remaining = digits;
   while (remaining.length > 3) {
@@ -143,7 +142,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
   const [dateTo, setDateTo] = useState(endOfMonth);
   const [sipFilter, setSipFilter] = useState(sipId ?? "");
 
-  const [data, setData] = useState<ZadarmaStatsResponse | null>(null);
+  const [data, setData] = useState<CallRecordResponse[] | null>(null);
   const [sips, setSips] = useState<SipInfoResponse[]>([]);
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -230,7 +229,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
     }
   }, [fetchCalls]);
 
-  const calls = data?.stats ?? [];
+  const calls = data ?? [];
 
   // ── Build a set of group people phone numbers for redirection check detection ──
   const groupPhoneNumbers = new Set(
@@ -241,10 +240,10 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
   );
 
   /** Check if a call from this number is a redirection check (test call from a group member) */
-  function isRedirectionCheck(call: ZadarmaCallRecord): boolean {
+  function isRedirectionCheck(call: CallRecordResponse): boolean {
     // Only non-answered calls from group members are redirection checks
     if (call.disposition === "answered") return false;
-    const fromStr = call.from != null ? String(call.from).replace(/\D/g, "") : "";
+    const fromStr = call.callerNumber ? call.callerNumber.replace(/\D/g, "") : "";
     if (!fromStr) return false;
     for (const phone of groupPhoneNumbers) {
       if (phone && (fromStr.includes(phone) || phone.includes(fromStr))) {
@@ -258,10 +257,10 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
   const redirectionCheckIds = new Set(redirectionChecks.map((c) => c.id));
 
   // ── Match each call to the on-call person at that time ──
-  function getOnCallPerson(call: ZadarmaCallRecord): string | null {
-    if (!call.callstart) return null;
+  function getOnCallPerson(call: CallRecordResponse): string | null {
+    if (!call.callStartedAt) return null;
     try {
-      const callTime = new Date(call.callstart.replace(" ", "T")).getTime();
+      const callTime = new Date(call.callStartedAt).getTime();
       for (const shift of shifts) {
         if (!shift.startTime || !shift.endTime) continue;
         const shiftStart = new Date(shift.startTime).getTime();
@@ -284,7 +283,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
       (c.disposition === "no answer" || c.disposition === "failed" || c.disposition === "busy" || c.disposition === "cancel") &&
       !redirectionCheckIds.has(c.id)
   ).length;
-  const totalDuration = calls.reduce((sum, c) => sum + (c.billseconds ?? 0), 0);
+  const totalDuration = calls.reduce((sum, c) => sum + (c.billSeconds ?? 0), 0);
 
   return (
     <div className="space-y-6">
@@ -452,9 +451,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                 </h3>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {totalCalls} llamada{totalCalls !== 1 ? "s" : ""}
-                  {data.start && data.end && (
-                    <> · {formatDateTime(data.start)} — {formatDateTime(data.end)}</>
-                  )}
                 </p>
               </div>
               <div className="overflow-x-auto">
@@ -474,18 +470,18 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                       const isCheck = redirectionCheckIds.has(call.id);
                       const onCallPerson = getOnCallPerson(call);
                       return (
-                      <tr key={call.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <tr key={call.id ?? call.externalCallId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                         <td className="px-6 py-3 whitespace-nowrap text-gray-900 dark:text-white">
-                          {formatDateTime(call.callstart)}
+                          {formatDateTime(call.callStartedAt)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap font-mono text-gray-600 dark:text-gray-400">
-                          {formatPhone(call.from)}
+                          {formatPhone(call.callerNumber)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap font-mono text-gray-600 dark:text-gray-400">
-                          {formatPhone(call.to)}
+                          {formatPhone(call.destinationNumber)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-gray-600 dark:text-gray-400">
-                          {formatDuration(call.billseconds)}
+                          {formatDuration(call.billSeconds)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap">
                           {isCheck ? (

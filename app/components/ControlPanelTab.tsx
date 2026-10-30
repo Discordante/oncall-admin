@@ -10,7 +10,7 @@ type DirectNumberInfo = components["schemas"]["DirectNumberInfo"];
 type RedirectionInfo = components["schemas"]["RedirectionInfo"];
 type ShiftRecord = components["schemas"]["ShiftResponse"];
 type SipInfoResponse = components["schemas"]["SipInfoResponse"];
-type ZadarmaCallRecord = components["schemas"]["ZadarmaCallRecord"];
+type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 
 // ---------------------------------------------------------------------------
 // Date helpers – current month
@@ -113,7 +113,7 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
   const [redirections, setRedirections] = useState<RedirectionInfo[]>([]);
   const [currentShift, setCurrentShift] = useState<ShiftRecord | null>(null);
   const [nextShift, setNextShift] = useState<ShiftRecord | null>(null);
-  const [monthCalls, setMonthCalls] = useState<ZadarmaCallRecord[]>([]);
+  const [monthCalls, setMonthCalls] = useState<CallRecordResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,9 +140,9 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
       .map((n) => n!.replace(/\D/g, ""))
   );
 
-  const isGroupMemberNumber = (from?: number): boolean => {
-    if (from == null) return false;
-    const fromStr = String(from).replace(/\D/g, "");
+  const isGroupMemberNumber = (callerNumber?: string | null): boolean => {
+    if (!callerNumber) return false;
+    const fromStr = callerNumber.replace(/\D/g, "");
     for (const phone of groupPhoneNumbers) {
       if (phone && (fromStr.includes(phone) || phone.includes(fromStr))) return true;
     }
@@ -223,8 +223,8 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
 
     // Monthly calls (excluding group member test calls)
     if (callsRes.status === "fulfilled") {
-      const allCalls = callsRes.value.data?.data?.stats ?? [];
-      const realCalls = allCalls.filter((c) => !isGroupMemberNumber(c.from));
+      const allCalls = callsRes.value.data?.data ?? [];
+      const realCalls = allCalls.filter((c) => !isGroupMemberNumber(c.callerNumber));
       setMonthCalls(realCalls);
     }
 
