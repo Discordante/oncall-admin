@@ -1168,6 +1168,11 @@ export interface components {
             endedAt?: string;
             /** @description IDs de llamadas vinculadas */
             callRecordIds?: string[];
+            /**
+             * Format: uuid
+             * @description ID del grupo de guardia al que pertenece la incidencia (opcional al actualizar: si no se envía se conserva el actual)
+             */
+            onCallGroupId?: string;
         };
         /** @description Datos de una incidencia */
         IncidentResponse: {
@@ -1190,6 +1195,9 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             updatedAt?: string;
+            /** Format: uuid */
+            onCallGroupId?: string;
+            onCallGroupName?: string;
         };
         /** @description Página de incidencias (Spring Data Page) */
         PageIncidentResponse: {
@@ -2095,6 +2103,11 @@ export interface operations {
                 size?: number;
                 sort?: string[];
                 applicationId?: string;
+                onCallGroupId?: string;
+                /** Format: date-time */
+                startedFrom?: string;
+                /** Format: date-time */
+                startedTo?: string;
             };
             header?: never; path?: never; cookie?: never;
         };

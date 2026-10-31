@@ -18,7 +18,6 @@ import type { components } from "~/lib/api";
 type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 type SipInfoResponse = components["schemas"]["SipInfoResponse"];
 type ShiftRecord = components["schemas"]["ShiftResponse"];
-type IncidentResponse = components["schemas"]["IncidentResponse"];
 
 /** Generic API error shape */
 interface ApiErrorShape {
@@ -107,118 +106,6 @@ function formatDisposition(disp?: string): ReactNode {
 }
 
 // ---------------------------------------------------------------------------
-// Link incident modal
-// ---------------------------------------------------------------------------
-interface LinkIncidentModalProps {
-  call: CallRecordResponse;
-  incidents: IncidentResponse[];
-  onLink: (incidentId: string) => Promise<string | null>;
-  onClose: () => void;
-}
-
-function LinkIncidentModal({ call, incidents, onLink, onClose }: LinkIncidentModalProps) {
-  const [search, setSearch] = useState("");
-  const [linkingId, setLinkingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const query = search.trim().toLowerCase();
-  const filtered = incidents.filter((incident) => {
-    if (!query) return true;
-    return (
-      (incident.title ?? "").toLowerCase().includes(query) ||
-      (incident.applicationName ?? "").toLowerCase().includes(query)
-    );
-  });
-
-  const handleSelect = async (incidentId: string) => {
-    setLinkingId(incidentId);
-    setError(null);
-    const err = await onLink(incidentId);
-    setLinkingId(null);
-    if (err) {
-      setError(err);
-    } else {
-      onClose();
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-xl dark:bg-gray-900">
-        <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">
-            Asociar llamada a incidencia
-          </h2>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {formatDateTime(call.callStartedAt)} · {formatPhone(call.callerNumber)}
-          </p>
-        </div>
-
-        <div className="border-b border-gray-200 px-6 py-3 dark:border-gray-700">
-          <input
-            autoFocus
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por título o aplicación…"
-            className={
-              "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
-              "placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 " +
-              "dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-            }
-          />
-        </div>
-
-        {error && (
-          <p className="mx-6 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
-            {error}
-          </p>
-        )}
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-          {filtered.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-              No hay incidencias que coincidan con la búsqueda.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {filtered.map((incident) => (
-                <li key={incident.id}>
-                  <button
-                    type="button"
-                    disabled={linkingId !== null}
-                    onClick={() => handleSelect(incident.id!)}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-indigo-50 disabled:opacity-50 dark:hover:bg-indigo-950/40"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-gray-900 dark:text-white">
-                        {incident.title}
-                      </p>
-                      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        {incident.applicationName ?? "Sin aplicación"} ·{" "}
-                        {formatDateTime(incident.startedAt ?? incident.createdAt)}
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs text-gray-400">
-                      {linkingId === incident.id ? "Asociando…" : `${incident.linkedCallsCount ?? 0} llamadas`}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex justify-end border-t border-gray-200 px-6 py-3 dark:border-gray-700">
-          <Button type="button" variant="secondary" size="md" onClick={onClose}>
-            Cancelar
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -236,9 +123,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
   const [data, setData] = useState<CallRecordResponse[] | null>(null);
   const [sips, setSips] = useState<SipInfoResponse[]>([]);
   const [shifts, setShifts] = useState<ShiftRecord[]>([]);
-  const [incidents, setIncidents] = useState<IncidentResponse[]>([]);
-  const [linkTarget, setLinkTarget] = useState<CallRecordResponse | null>(null);
-  const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingSips, setLoadingSips] = useState(!sipId);
   const [error, setError] = useState<string | null>(null);
@@ -259,18 +143,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
     }
     fetchSips();
   }, [sipId]);
-
-  // ── Fetch incidents available for association ──
-  const fetchIncidents = useCallback(async () => {
-    const { data: incidentsData } = await api.GET("/api/v1/incidents", {
-      params: { query: { size: 200, sort: ["createdAt,desc"] } },
-    });
-    if (incidentsData?.data) {
-      setIncidents(incidentsData.data.content ?? []);
-    }
-  }, []);
-
-  useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
   // ── Fetch calls summary and shifts ──
   const fetchCalls = useCallback(async () => {
@@ -335,32 +207,10 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
     }
   }, [fetchCalls]);
 
-  // ── Link / unlink a call with an incident ──
-  const handleLinkIncident = async (call: CallRecordResponse, incidentId: string): Promise<string | null> => {
-    if (!call.id) return "La llamada no tiene identificador interno";
-    const { error: apiError } = await api.POST("/api/v1/incidents/{id}/calls/{callId}", {
-      params: { path: { id: incidentId, callId: call.id } },
-    });
-    if (apiError) return getErrorMessage(apiError, "No se pudo asociar la incidencia");
-    await Promise.all([fetchCalls(), fetchIncidents()]);
-    return null;
-  };
-
-  const handleUnlinkIncident = async (call: CallRecordResponse) => {
-    if (!call.id || !call.incidentId) return;
-    setUnlinkingId(call.id);
-    const { error: apiError } = await api.DELETE("/api/v1/incidents/{id}/calls/{callId}", {
-      params: { path: { id: call.incidentId, callId: call.id } },
-    });
-    setUnlinkingId(null);
-    if (apiError) {
-      setError(getErrorMessage(apiError, "No se pudo desvincular la incidencia"));
-    } else {
-      await Promise.all([fetchCalls(), fetchIncidents()]);
-    }
-  };
-
-  const calls = data ?? [];
+  // Newest call first (the API already returns them ordered; sort defensively)
+  const calls = [...(data ?? [])].sort(
+    (a, b) => (toMillis(b.callStartedAt) ?? 0) - (toMillis(a.callStartedAt) ?? 0)
+  );
 
   // ── Check-call detection ──
   // The backend flags a call as `checkCall` when its origin number belongs to a
@@ -591,11 +441,9 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                     <tr className="border-b border-gray-200 text-left dark:border-gray-700">
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Fecha / Hora</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Origen</th>
-                      <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Destino</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Duración</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Estado</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Aplicación</th>
-                      <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Incidencia</th>
                       <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Responsable</th>
                     </tr>
                   </thead>
@@ -610,9 +458,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap font-mono text-gray-600 dark:text-gray-400">
                           {formatPhone(call.callerNumber)}
-                        </td>
-                        <td className="px-6 py-3 whitespace-nowrap font-mono text-gray-600 dark:text-gray-400">
-                          {formatPhone(call.destinationNumber)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-gray-600 dark:text-gray-400">
                           {formatDuration(call.billSeconds)}
@@ -649,40 +494,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                               </div>
                             );
                           })()}
-                        </td>
-                        <td className="px-6 py-3 whitespace-nowrap">
-                          {call.incidentId ? (
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="max-w-[14rem] truncate text-gray-600 dark:text-gray-400"
-                                title={call.incidentTitle}
-                              >
-                                {call.incidentTitle ?? "Incidencia vinculada"}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleUnlinkIncident(call)}
-                                disabled={unlinkingId === call.id}
-                                title="Desvincular incidencia"
-                                className="rounded p-1 text-red-500 hover:bg-red-50 disabled:opacity-40 dark:hover:bg-red-950/30"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setLinkTarget(call)}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
-                            >
-                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                              </svg>
-                              Asociar incidencia
-                            </button>
-                          )}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap text-gray-600 dark:text-gray-400">
                           {onCallPerson ?? "—"}
@@ -721,15 +532,6 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
         </div>
       )}
 
-      {/* ── Link incident modal ── */}
-      {linkTarget && (
-        <LinkIncidentModal
-          call={linkTarget}
-          incidents={incidents}
-          onLink={(incidentId) => handleLinkIncident(linkTarget, incidentId)}
-          onClose={() => setLinkTarget(null)}
-        />
-      )}
     </div>
   );
 }

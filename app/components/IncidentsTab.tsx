@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "~/components/ui/Button";
 import { api } from "~/lib/api";
-import { formatDateTime, fromDateTimeLocal, toDateTimeLocal } from "~/lib/format";
+import { formatDateTime, fromDateTimeLocal, toDateTimeLocal, endOfDayIso, endOfMonthDate, startOfDayIso, startOfPreviousMonthDate } from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -271,12 +271,15 @@ interface IncidentsTabProps {
   applications: ApplicationResponse[];
 }
 
-export function IncidentsTab({ applications }: IncidentsTabProps) {
+export function IncidentsTab({ groupId, applications }: IncidentsTabProps) {
   const [incidents, setIncidents] = useState<IncidentResponse[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [appFilter, setAppFilter] = useState<string>("");
+  // Default range: previous month + current month
+  const [dateFrom, setDateFrom] = useState(startOfPreviousMonthDate);
+  const [dateTo, setDateTo] = useState(endOfMonthDate);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalIncident, setModalIncident] = useState<IncidentResponse | null | undefined>(undefined); // undefined=closed, null=create, IncidentResponse=edit
@@ -295,6 +298,9 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
           size: PAGE_SIZE,
           sort: ["createdAt,desc"],
           applicationId: appFilter || undefined,
+          onCallGroupId: groupId,
+          startedFrom: startOfDayIso(dateFrom),
+          startedTo: endOfDayIso(dateTo),
         },
       },
     });
@@ -306,20 +312,22 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
       setTotalElements(data.data.totalElements ?? 0);
     }
     setLoading(false);
-  }, [page, appFilter]);
+  }, [page, appFilter, groupId, dateFrom, dateTo]);
 
   useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
   const handleSave = async (id: string | null, req: IncidentRequest): Promise<string | null> => {
+    // Every incident belongs to the group it is created from
+    const body: IncidentRequest = { ...req, onCallGroupId: groupId };
     if (id === null) {
       // create
-      const { error: apiErr } = await api.POST("/api/v1/incidents", { body: req });
+      const { error: apiErr } = await api.POST("/api/v1/incidents", { body });
       if (apiErr) return getApiError(apiErr, "Error al crear la incidencia");
     } else {
       // update
       const { error: apiErr } = await api.PUT("/api/v1/incidents/{id}", {
         params: { path: { id } },
-        body: req,
+        body,
       });
       if (apiErr) return getApiError(apiErr, "Error al guardar la incidencia");
     }
@@ -345,6 +353,30 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
     <div className="space-y-6">
       {/* ── Filters + New button ── */}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900">
+        <div className="min-w-0 flex-1 sm:flex-none sm:w-40">
+          <label htmlFor="incidents-from" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Inicio desde
+          </label>
+          <input
+            id="incidents-from"
+            type="date"
+            value={dateFrom}
+            onChange={e => { setDateFrom(e.target.value); setPage(0); }}
+            className={inputCls}
+          />
+        </div>
+        <div className="min-w-0 flex-1 sm:flex-none sm:w-40">
+          <label htmlFor="incidents-to" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Inicio hasta
+          </label>
+          <input
+            id="incidents-to"
+            type="date"
+            value={dateTo}
+            onChange={e => { setDateTo(e.target.value); setPage(0); }}
+            className={inputCls}
+          />
+        </div>
         <div className="min-w-0 flex-1 sm:flex-none sm:w-64">
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Filtrar por aplicación
@@ -417,7 +449,6 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
         {!loading && incidents.length > 0 && (
           <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-3">
             {incidents.map(inc => {
-              const isOpen = !inc.endedAt;
               const linkedCalls = inc.linkedCallsCount ?? 0;
               return (
                 <article
@@ -433,15 +464,6 @@ export function IncidentsTab({ applications }: IncidentsTabProps) {
                         {inc.title}
                       </h4>
                     </div>
-                    <span
-                      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                        isOpen
-                          ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                      }`}
-                    >
-                      {isOpen ? "Abierta" : "Finalizada"}
-                    </span>
                   </header>
 
                   <div className="mt-4 flex flex-wrap gap-2">

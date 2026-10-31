@@ -56,6 +56,15 @@ export function startOfMonthDate(): string {
   return DateTime.now().setZone(APP_TIMEZONE).startOf("month").toFormat("yyyy-MM-dd");
 }
 
+/** First day of the previous month as "yyyy-MM-dd" in the app timezone. */
+export function startOfPreviousMonthDate(): string {
+  return DateTime.now()
+    .setZone(APP_TIMEZONE)
+    .minus({ months: 1 })
+    .startOf("month")
+    .toFormat("yyyy-MM-dd");
+}
+
 /** Last day of the current month as "yyyy-MM-dd" in the app timezone. */
 export function endOfMonthDate(): string {
   return DateTime.now().setZone(APP_TIMEZONE).endOf("month").toFormat("yyyy-MM-dd");
