@@ -1,6 +1,7 @@
 import { useLoaderData, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/_protected.applications";
 import { api } from "~/lib/api";
+import { formatDate } from "~/lib/format";
 import { Button } from "~/components/ui/Button";
 
 // ---------------------------------------------------------------------------
@@ -92,7 +93,7 @@ export default function ApplicationsList() {
                   </p>
                 )}
                 <div className="mt-4 text-xs text-gray-400 dark:text-gray-500">
-                  Creada: {app.createdAt ? new Date(app.createdAt).toLocaleDateString("es-ES") : "—"}
+                  Creada: {formatDate(app.createdAt)}
                 </div>
               </Link>
 

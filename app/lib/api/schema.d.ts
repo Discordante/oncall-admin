@@ -1137,6 +1137,15 @@ export interface components {
             billSeconds?: number;
             disposition?: string;
             description?: string;
+            /** Format: uuid */
+            incidentId?: string;
+            /** @description Título de la incidencia vinculada (si existe) */
+            incidentTitle?: string;
+            /** Format: uuid */
+            applicationId?: string;
+            /** @description Nombre de la aplicación asociada a la incidencia vinculada */
+            applicationName?: string;
+            applicationNames?: string[];
             /** Format: date-time */
             createdAt?: string;
         };
@@ -1144,8 +1153,11 @@ export interface components {
         IncidentRequest: {
             /** @description Título de la incidencia */
             title: string;
-            /** Format: uuid */
-            applicationId: string;
+            /**
+             * Format: uuid
+             * @description ID de la aplicación afectada (opcional, se puede asignar al editar)
+             */
+            applicationId?: string;
             description?: string;
             bridgeOpened?: boolean;
             /** Format: date-time */

@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
+import {
+  endOfDayIso,
+  endOfMonthDate,
+  formatDate,
+  formatDateTime,
+  nowMillis,
+  startOfDayIso,
+  startOfMonthDate,
+  toMillis,
+} from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -13,42 +23,8 @@ type SipInfoResponse = components["schemas"]["SipInfoResponse"];
 type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 
 // ---------------------------------------------------------------------------
-// Date helpers – current month
-// ---------------------------------------------------------------------------
-function startOfMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function endOfMonth(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 1, 0);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function now(): Date {
-  return new Date();
-}
-
-// ---------------------------------------------------------------------------
 // Formatters
 // ---------------------------------------------------------------------------
-function formatDateTime(raw?: string): string {
-  if (!raw) return "—";
-  try {
-    const d = new Date(raw);
-    return d.toLocaleString("es-ES", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return raw;
-  }
-}
-
 /** Format an international phone number: +XX XXX XXX XXX */
 function formatPhoneNumber(raw?: string): string {
   if (!raw) return "—";
@@ -155,9 +131,9 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
     setLoading(true);
     setError(null);
 
-    const nowDate = now();
-    const fromISO = new Date(startOfMonth() + "T00:00:00").toISOString();
-    const toISO = new Date(endOfMonth() + "T23:59:59").toISOString();
+    const nowMs = nowMillis();
+    const fromISO = startOfDayIso(startOfMonthDate());
+    const toISO = endOfDayIso(endOfMonthDate());
 
     const [directNumRes, redirRes, shiftsRes, callsRes] = await Promise.allSettled([
       api.GET("/api/v1/zadarma/direct-numbers"),
@@ -172,8 +148,8 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
       api.GET("/api/v1/zadarma/calls-summary", {
         params: {
           query: {
-            start: `${startOfMonth()} 00:00:00`,
-            end: `${endOfMonth()} 23:59:59`,
+            start: `${startOfMonthDate()} 00:00:00`,
+            end: `${endOfMonthDate()} 23:59:59`,
             sip: sipFilter,
           },
         },
@@ -196,24 +172,21 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
     if (shiftsRes.status === "fulfilled" && shiftsRes.value) {
       const shifts = shiftsRes.value.data?.data ?? [];
       const sorted = [...shifts].sort(
-        (a, b) => new Date(a.startTime ?? 0).getTime() - new Date(b.startTime ?? 0).getTime()
+        (a, b) => (toMillis(a.startTime) ?? 0) - (toMillis(b.startTime) ?? 0)
       );
       const active = sorted.find((s) => {
-        if (!s.startTime || !s.endTime) return false;
-        const start = new Date(s.startTime).getTime();
-        const end = new Date(s.endTime).getTime();
-        const t = nowDate.getTime();
-        return t >= start && t < end;
+        const start = toMillis(s.startTime);
+        const end = toMillis(s.endTime);
+        if (start == null || end == null) return false;
+        return nowMs >= start && nowMs < end;
       }) ?? null;
       setCurrentShift(active);
 
       // Find next shift that starts after the current one ends (or after now)
-      const referenceTime = active?.endTime
-        ? new Date(active.endTime).getTime()
-        : nowDate.getTime();
+      const referenceTime = toMillis(active?.endTime) ?? nowMs;
       const next = sorted.find((s) => {
-        if (!s.startTime) return false;
-        return new Date(s.startTime).getTime() >= referenceTime && s.id !== active?.id;
+        const start = toMillis(s.startTime);
+        return start != null && start >= referenceTime && s.id !== active?.id;
       }) ?? null;
       setNextShift(next);
     } else {
@@ -240,12 +213,12 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
 
   // ── Stats ──
   const activeRedir = redirections.find((r) => r.status === "on");
-  const nowMs = now().getTime();
+  const nowMs = nowMillis();
 
   // ── Remaining time in current shift ──
   const remaining = (() => {
-    if (!currentShift?.endTime) return null;
-    const end = new Date(currentShift.endTime).getTime();
+    const end = toMillis(currentShift?.endTime);
+    if (end == null) return null;
     const diff = end - nowMs;
     if (diff <= 0) return null;
     const days = Math.floor(diff / 86400000);
@@ -258,22 +231,16 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
   // ── Date range string for current shift ──
   const dateRange = (() => {
     if (!currentShift?.startTime || !currentShift?.endTime) return null;
-    const fmt = (d: string) => {
-      try {
-        return new Date(d).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
-      } catch { return d; }
-    };
-    return `${fmt(currentShift.startTime)} → ${fmt(currentShift.endTime)}`;
+    return `${formatDate(currentShift.startTime)} → ${formatDate(currentShift.endTime)}`;
   })();
 
   // ── Numbers near expiry (within 15 days) ──
   const expiringNumbers = directNumbers.filter((n) => {
     if (n.status !== "on" || !n.stop_date) return false;
-    try {
-      const stop = new Date(n.stop_date.replace(" ", "T")).getTime();
-      const daysLeft = (stop - nowMs) / 86400000;
-      return daysLeft >= 0 && daysLeft <= 15;
-    } catch { return false; }
+    const stop = toMillis(n.stop_date);
+    if (stop == null) return false;
+    const daysLeft = (stop - nowMs) / 86400000;
+    return daysLeft >= 0 && daysLeft <= 15;
   });
 
   return (
@@ -388,7 +355,7 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
                       {" "}·{" "}
                       {nextShift.startTime && (
                         <span className="text-gray-500 dark:text-gray-400">
-                          {new Date(nextShift.startTime).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          {formatDate(nextShift.startTime)}
                         </span>
                       )}
                     </p>

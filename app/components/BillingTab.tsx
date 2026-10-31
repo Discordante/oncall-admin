@@ -2,7 +2,13 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
-import { formatDuration } from "~/lib/format";
+import {
+  endOfDayIso,
+  endOfMonthDate,
+  formatDuration,
+  startOfDayIso,
+  startOfMonthDate,
+} from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -34,19 +40,6 @@ const inputCls =
   "placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 " +
   "dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500";
 
-/** First day of current month as YYYY-MM-DD */
-function startOfMonth(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-/** Last day of current month as YYYY-MM-DD */
-function endOfMonth(): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() + 1, 0);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function formatCurrency(val?: number): string {
   if (val == null) return "—";
   return `${val.toLocaleString("es-ES", {
@@ -64,8 +57,8 @@ function csvEscape(value: string): string {
 // Component
 // ---------------------------------------------------------------------------
 export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTabProps) {
-  const [dateFrom, setDateFrom] = useState(startOfMonth);
-  const [dateTo, setDateTo] = useState(endOfMonth);
+  const [dateFrom, setDateFrom] = useState(startOfMonthDate);
+  const [dateTo, setDateTo] = useState(endOfMonthDate);
   const [personFilter, setPersonFilter] = useState("");
 
   const [billing, setBilling] = useState<BillingReportResponse | null>(null);
@@ -76,8 +69,8 @@ export function BillingTab({ groupId, grossPricePerDay, groupPeople }: BillingTa
     setLoading(true);
     setError(null);
 
-    const fromIso = dateFrom ? new Date(dateFrom + "T00:00:00").toISOString() : undefined;
-    const toIso = dateTo ? new Date(dateTo + "T23:59:59").toISOString() : undefined;
+    const fromIso = dateFrom ? startOfDayIso(dateFrom) : undefined;
+    const toIso = dateTo ? endOfDayIso(dateTo) : undefined;
 
     const { data, error: apiError } = await api.GET("/api/v1/billing", {
       params: {

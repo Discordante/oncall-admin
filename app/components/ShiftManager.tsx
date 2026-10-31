@@ -3,13 +3,22 @@ import { DateTime } from "luxon";
 import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
-import { formatDuration } from "~/lib/format";
+import {
+  APP_TIMEZONE,
+  endOfDayIso,
+  formatDateTime,
+  formatDuration,
+  fromDateTimeLocal,
+  startOfDayIso,
+  toDateTimeLocal,
+  toMillis,
+} from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
 // Timezone
 // ---------------------------------------------------------------------------
-const TZ = "Europe/Madrid";
+const TZ = APP_TIMEZONE;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,16 +87,12 @@ const inputCls =
 
 /** Convierte un datetime-local (en hora de Madrid) a ISO-8601 UTC */
 function toIsoUtc(datetimeLocal: string): string {
-  if (!datetimeLocal) return "";
-  const dt = DateTime.fromISO(datetimeLocal, { zone: TZ });
-  return dt.isValid ? (dt.toUTC().toISO() ?? "") : "";
+  return fromDateTimeLocal(datetimeLocal) ?? "";
 }
 
 /** Convierte un ISO-8601 a formato datetime-local en hora de Madrid */
 function toDatetimeLocal(iso?: string): string {
-  if (!iso) return "";
-  const dt = DateTime.fromISO(iso, { zone: TZ });
-  return dt.isValid ? dt.toFormat("yyyy-MM-dd'T'HH:mm") : "";
+  return toDateTimeLocal(iso);
 }
 
 /** Obtiene una fecha YYYY-MM-DD desplazada n días desde hoy en Madrid */
@@ -158,20 +163,20 @@ function findOverlappingShifts(
   existingShifts: ShiftResponse[],
   excludeShiftId?: string,
 ): OverlapInfo[] {
-  const start = new Date(newStartIso).getTime();
-  const end = new Date(newEndIso).getTime();
+  const start = toMillis(newStartIso) ?? 0;
+  const end = toMillis(newEndIso) ?? 0;
 
   return existingShifts
     .filter((s) => {
       if (excludeShiftId && s.id === excludeShiftId) return false;
-      const sStart = s.startTime ? new Date(s.startTime).getTime() : 0;
-      const sEnd = s.endTime ? new Date(s.endTime).getTime() : 0;
+      const sStart = toMillis(s.startTime) ?? 0;
+      const sEnd = toMillis(s.endTime) ?? 0;
       // Hay solapamiento si: newStart < sEnd AND newEnd > sStart
       return start < sEnd && end > sStart;
     })
     .map((s) => {
-      const sStart = s.startTime ? new Date(s.startTime).getTime() : 0;
-      const sEnd = s.endTime ? new Date(s.endTime).getTime() : 0;
+      const sStart = toMillis(s.startTime) ?? 0;
+      const sEnd = toMillis(s.endTime) ?? 0;
       return {
         shift: s,
         engulfed: start <= sStart && end >= sEnd,
@@ -231,12 +236,8 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
     setLoading(true);
     setError(null);
 
-    const fromIso = dateFrom
-      ? DateTime.fromISO(dateFrom, { zone: TZ }).startOf("day").toUTC().toISO() ?? undefined
-      : undefined;
-    const toIso = dateTo
-      ? DateTime.fromISO(dateTo, { zone: TZ }).endOf("day").toUTC().toISO() ?? undefined
-      : undefined;
+    const fromIso = dateFrom ? startOfDayIso(dateFrom) : undefined;
+    const toIso = dateTo ? endOfDayIso(dateTo) : undefined;
 
     const { data, error: apiError } = await api.GET("/api/v1/shifts", {
       params: {
@@ -254,8 +255,8 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
     } else {
       const list = data?.data ?? [];
       list.sort((a, b) => {
-        const aTime = a.startTime ? DateTime.fromISO(a.startTime).toMillis() : 0;
-        const bTime = b.startTime ? DateTime.fromISO(b.startTime).toMillis() : 0;
+        const aTime = toMillis(a.startTime) ?? 0;
+        const bTime = toMillis(b.startTime) ?? 0;
         return aTime - bTime;
       });
       setShifts(list);
@@ -453,11 +454,7 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
   };
 
   // ── Render helpers ──
-  const formatDate = (iso?: string) => {
-    if (!iso) return "—";
-    const dt = DateTime.fromISO(iso, { zone: TZ });
-    return dt.isValid ? dt.setLocale("es").toFormat("dd/MM/yyyy HH:mm") : "—";
-  };
+  const formatDate = (iso?: string) => formatDateTime(iso);
 
   const formatRange = (start?: string, end?: string) =>
     `${formatDate(start)} → ${formatDate(end)}`;

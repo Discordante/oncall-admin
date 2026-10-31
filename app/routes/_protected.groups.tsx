@@ -1,6 +1,7 @@
 import { useLoaderData, useNavigate, Link } from "react-router";
 import type { Route } from "./+types/_protected.groups";
 import { api } from "~/lib/api";
+import { toMillis } from "~/lib/format";
 import type { components } from "~/lib/api";
 import { Button } from "~/components/ui/Button";
 
@@ -43,11 +44,9 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
     const activeNumbers = sipNumbers.filter((n) => n.status === "on");
     const nowMs = Date.now();
     const expiringSoon = activeNumbers.some((n) => {
-      if (!n.stop_date) return false;
-      try {
-        const stop = new Date(n.stop_date.replace(" ", "T")).getTime();
-        return (stop - nowMs) / 86400000 <= 15 && (stop - nowMs) >= 0;
-      } catch { return false; }
+      const stop = toMillis(n.stop_date);
+      if (stop == null) return false;
+      return (stop - nowMs) / 86400000 <= 15 && (stop - nowMs) >= 0;
     });
 
     groupHealth.set(g.id!, {
