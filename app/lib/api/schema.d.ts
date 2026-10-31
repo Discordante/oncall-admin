@@ -1148,6 +1148,8 @@ export interface components {
             applicationNames?: string[];
             /** Format: date-time */
             createdAt?: string;
+            /** @description Indica si es una llamada de comprobación: el número de origen pertenece a una persona dada de alta en la aplicación */
+            checkCall?: boolean;
         };
         /** @description Solicitud para crear o actualizar una incidencia */
         IncidentRequest: {

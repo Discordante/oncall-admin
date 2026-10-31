@@ -194,10 +194,10 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
       setNextShift(null);
     }
 
-    // Monthly calls (excluding group member test calls)
+    // Monthly calls (excluding check calls: originated from a registered person's phone)
     if (callsRes.status === "fulfilled") {
       const allCalls = callsRes.value.data?.data ?? [];
-      const realCalls = allCalls.filter((c) => !isGroupMemberNumber(c.callerNumber));
+      const realCalls = allCalls.filter((c) => c.checkCall !== true && !isGroupMemberNumber(c.callerNumber));
       setMonthCalls(realCalls);
     }
 

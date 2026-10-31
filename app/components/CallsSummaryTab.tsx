@@ -362,7 +362,10 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
 
   const calls = data ?? [];
 
-  // ── Build a set of group people phone numbers for redirection check detection ──
+  // ── Check-call detection ──
+  // The backend flags a call as `checkCall` when its origin number belongs to a
+  // person registered in the application (a "comprobación"). Non-answered calls
+  // from group members are kept as checks too (legacy behaviour).
   const groupPhoneNumbers = new Set(
     groupPeople
       .map((p) => p.phoneNumber)
@@ -370,9 +373,8 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
       .map((n) => n!.replace(/\D/g, "")) // normalize: strip all non-digit chars
   );
 
-  /** Check if a call from this number is a redirection check (test call from a group member) */
-  function isRedirectionCheck(call: CallRecordResponse): boolean {
-    // Only non-answered calls from group members are redirection checks
+  function isCheckCall(call: CallRecordResponse): boolean {
+    if (call.checkCall === true) return true;
     if (call.disposition === "answered") return false;
     const fromStr = call.callerNumber ? call.callerNumber.replace(/\D/g, "") : "";
     if (!fromStr) return false;
@@ -384,8 +386,8 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
     return false;
   }
 
-  const redirectionChecks = calls.filter(isRedirectionCheck);
-  const redirectionCheckIds = new Set(redirectionChecks.map((c) => c.id));
+  const checkCalls = calls.filter(isCheckCall);
+  const checkCallIds = new Set(checkCalls.map((c) => c.id));
 
   // ── Match each call to the on-call person at that time ──
   function getOnCallPerson(call: CallRecordResponse): string | null {
@@ -405,11 +407,13 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
 
   // ── Summary stats ──
   const totalCalls = calls.length;
-  const answeredCalls = calls.filter((c) => c.disposition === "answered").length;
+  const answeredCalls = calls.filter(
+    (c) => c.disposition === "answered" && !checkCallIds.has(c.id)
+  ).length;
   const missedCalls = calls.filter(
     (c) =>
       (c.disposition === "no answer" || c.disposition === "failed" || c.disposition === "busy" || c.disposition === "cancel") &&
-      !redirectionCheckIds.has(c.id)
+      !checkCallIds.has(c.id)
   ).length;
   const totalDuration = calls.reduce((sum, c) => sum + (c.billSeconds ?? 0), 0);
 
@@ -535,8 +539,8 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
               </div>
             </div>
 
-            {/* Redirection checks */}
-            {redirectionChecks.length > 0 && (
+            {/* Check calls */}
+            {checkCalls.length > 0 && (
               <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-900">
                 <div className="flex items-center gap-3">
                   <div className="rounded-lg bg-blue-50 p-2.5 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
@@ -546,7 +550,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                   </div>
                   <div>
                     <p className="text-xs font-medium text-gray-500 dark:text-gray-400">Comprobaciones</p>
-                    <p className="text-xl font-bold text-gray-900 dark:text-white">{redirectionChecks.length}</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{checkCalls.length}</p>
                   </div>
                 </div>
               </div>
@@ -597,7 +601,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {calls.map((call) => {
-                      const isCheck = redirectionCheckIds.has(call.id);
+                      const isCheck = checkCallIds.has(call.id);
                       const onCallPerson = getOnCallPerson(call);
                       return (
                       <tr key={call.id ?? call.externalCallId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
