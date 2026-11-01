@@ -1,5 +1,20 @@
-import { useState, useEffect, useCallback, forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  forwardRef,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { DateTime } from "luxon";
+import FullCalendar from "@fullcalendar/react";
+import dayGridPlugin from "@fullcalendar/daygrid";
+import esLocale from "@fullcalendar/core/locales/es";
+import type { EventContentArg } from "@fullcalendar/core";
+import type { CalendarApi } from "@fullcalendar/core";
+import type { DatesSetArg } from "@fullcalendar/core";
 import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
@@ -20,10 +35,34 @@ import type { components } from "~/lib/api";
 // ---------------------------------------------------------------------------
 const TZ = APP_TIMEZONE;
 
+function getEventColorByIndex(index: number) {
+  // Golden-angle distribution to avoid repeated hues in the visible set.
+  const hue = Math.round((index * 137.508) % 360);
+  return {
+    bg: `hsl(${hue} 72% 45%)`,
+    border: `hsl(${hue} 75% 33%)`,
+    text: "#f8fafc",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 type ShiftResponse = components["schemas"]["ShiftResponse"];
+interface ShiftCalendarEvent {
+  id?: string;
+  title: string;
+  start?: string;
+  end?: string;
+  allDay: boolean;
+  classNames?: string[];
+  backgroundColor: string;
+  borderColor: string;
+  textColor: string;
+  extendedProps: {
+    shift: ShiftResponse;
+  };
+}
 
 /** Generic API error shape shared across all endpoints */
 interface ApiErrorShape {
@@ -106,6 +145,14 @@ function oneWeekAgo(): string {
 
 function fourWeeksAhead(): string {
   return daysFromToday(28);
+}
+
+function defaultShiftDateTimeLocal(daysOffset: number): string {
+  return DateTime.now()
+    .setZone(TZ)
+    .plus({ days: daysOffset })
+    .set({ hour: 8, minute: 0, second: 0, millisecond: 0 })
+    .toFormat("yyyy-MM-dd'T'HH:mm");
 }
 
 type ShiftStatus = "activo" | "programado" | "realizado";
@@ -230,6 +277,7 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const calendarRef = useRef<FullCalendar | null>(null);
 
   // ── Load shifts ──
   const fetchShifts = useCallback(async () => {
@@ -318,6 +366,30 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
     setEditPersonId("");
     setEditError(null);
   };
+
+  const handleCloseCreateForm = () => {
+    setShowCreateForm(false);
+    setCreateError(null);
+    setNewStart("");
+    setNewEnd("");
+    setNewPersonId("");
+  };
+
+  const handleOpenCreateForm = () => {
+    setShowCreateForm(true);
+    setCreateError(null);
+    setNewStart(defaultShiftDateTimeLocal(0));
+    setNewEnd(defaultShiftDateTimeLocal(1));
+    setNewPersonId("");
+  };
+
+  const handleCloseShiftFormModal = useCallback(() => {
+    if (editingShift) {
+      handleCancelEdit();
+    } else {
+      handleCloseCreateForm();
+    }
+  }, [editingShift]);
 
   // ── Update shift (shows confirmation modal) ──
   const handleUpdate = async (e: React.FormEvent) => {
@@ -461,7 +533,213 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
 
   const activePeople = people.filter((p) => p.id && p.name);
 
-  // ── Shared form fields for create & edit (labels inline) ──
+  const personColorMap = useMemo(() => {
+    const keys = Array.from(
+      new Set(
+        shifts.map((shift) => shift.personId ?? shift.personName ?? "sin-persona"),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    const map = new Map<string, { bg: string; border: string; text: string }>();
+    keys.forEach((key, index) => {
+      map.set(key, getEventColorByIndex(index));
+    });
+
+    return map;
+  }, [shifts]);
+
+  const shiftCalendarEvents = useMemo<ShiftCalendarEvent[]>(() => {
+    interface DayCandidate {
+      personKey: string;
+      personName: string;
+      hours: number;
+      shift: ShiftResponse;
+    }
+
+    const dayCandidates = new Map<string, DayCandidate[]>();
+
+    shifts.forEach((shift) => {
+      const start = shift.startTime
+        ? DateTime.fromISO(shift.startTime, { setZone: true }).setZone(TZ)
+        : null;
+      const end = shift.endTime
+        ? DateTime.fromISO(shift.endTime, { setZone: true }).setZone(TZ)
+        : null;
+
+      if (!start?.isValid || !end?.isValid || end <= start) {
+        return;
+      }
+
+      const personKey = shift.personId ?? shift.personName ?? "sin-persona";
+      const personName = shift.personName ?? "Sin persona";
+      let cursor = start.startOf("day");
+      const lastDay = end.startOf("day");
+
+      while (cursor <= lastDay) {
+        const dayStart = cursor;
+        const dayEnd = cursor.plus({ days: 1 });
+        const overlapStart = start > dayStart ? start : dayStart;
+        const overlapEnd = end < dayEnd ? end : dayEnd;
+        const hours = overlapEnd.diff(overlapStart, "hours").hours;
+        const dayKey = dayStart.toISODate();
+
+        if (dayKey && hours > 0) {
+          const list = dayCandidates.get(dayKey) ?? [];
+          list.push({ personKey, personName, hours, shift });
+          dayCandidates.set(dayKey, list);
+        }
+
+        cursor = cursor.plus({ days: 1 });
+      }
+    });
+
+    const dayOwner = new Map<string, DayCandidate>();
+    dayCandidates.forEach((candidates, dayKey) => {
+      const selected = [...candidates].sort((a, b) => {
+        if (b.hours !== a.hours) return b.hours - a.hours;
+        return a.personName.localeCompare(b.personName);
+      })[0];
+      if (selected) {
+        dayOwner.set(dayKey, selected);
+      }
+    });
+
+    const sortedDays = Array.from(dayOwner.keys()).sort((a, b) => a.localeCompare(b));
+    const events: ShiftCalendarEvent[] = [];
+    const todayStart = DateTime.now().setZone(TZ).startOf("day");
+
+    let runStart: string | null = null;
+    let runEnd: string | null = null;
+    let runOwner: DayCandidate | null = null;
+
+    const pushRun = () => {
+      if (!runStart || !runEnd || !runOwner) return;
+
+      const endExclusive = DateTime.fromISO(runEnd, { zone: TZ }).plus({ days: 1 }).toISODate();
+      if (!endExclusive) return;
+
+      const eventLastDayEnd = DateTime.fromISO(runEnd, { zone: TZ }).endOf("day");
+      const isPastEvent = eventLastDayEnd < todayStart;
+
+      const fallbackIndex = personColorMap.size;
+      const color = personColorMap.get(runOwner.personKey) ?? getEventColorByIndex(fallbackIndex);
+
+      events.push({
+        id: `${runOwner.personKey}-${runStart}-${runEnd}`,
+        title: runOwner.personName,
+        start: runStart,
+        end: endExclusive,
+        allDay: true,
+        classNames: isPastEvent ? ["fc-shift-past"] : undefined,
+        backgroundColor: color.bg,
+        borderColor: color.border,
+        textColor: color.text,
+        extendedProps: {
+          shift: runOwner.shift,
+        },
+      });
+    };
+
+    sortedDays.forEach((dayKey) => {
+      const owner = dayOwner.get(dayKey);
+      if (!owner) return;
+
+      if (!runStart || !runEnd || !runOwner) {
+        runStart = dayKey;
+        runEnd = dayKey;
+        runOwner = owner;
+        return;
+      }
+
+      const expectedNext = DateTime.fromISO(runEnd, { zone: TZ }).plus({ days: 1 }).toISODate();
+      const sameOwner = runOwner.personKey === owner.personKey;
+
+      if (sameOwner && expectedNext === dayKey) {
+        runEnd = dayKey;
+      } else {
+        pushRun();
+        runStart = dayKey;
+        runEnd = dayKey;
+        runOwner = owner;
+      }
+    });
+
+    pushRun();
+
+    return events;
+  }, [shifts, personColorMap]);
+
+  const calendarInitialDate = useMemo(() => {
+    const rangeFrom = dateFrom
+      ? DateTime.fromISO(dateFrom, { zone: TZ }).startOf("day")
+      : null;
+    return (rangeFrom?.isValid ? rangeFrom : DateTime.now().setZone(TZ)).toISODate() ?? undefined;
+  }, [dateFrom]);
+
+  const calendarMonthTitle = useMemo(() => {
+    const from = DateTime.fromISO(dateFrom, { zone: TZ });
+    const base = (from.isValid ? from : DateTime.now().setZone(TZ)).setLocale("es");
+    return base.toFormat("LLLL 'de' yyyy");
+  }, [dateFrom]);
+
+  useEffect(() => {
+    const api = calendarRef.current?.getApi() as CalendarApi | undefined;
+    if (!api || !calendarInitialDate) return;
+    api.gotoDate(calendarInitialDate);
+  }, [calendarInitialDate]);
+
+  const handleCalendarDatesSet = useCallback((arg: DatesSetArg) => {
+    const nextFrom = DateTime.fromJSDate(arg.view.currentStart, { zone: TZ }).toISODate();
+    const nextTo = DateTime.fromJSDate(arg.view.currentEnd, { zone: TZ }).minus({ days: 1 }).toISODate();
+
+    if (!nextFrom || !nextTo) return;
+
+    setDateFrom((prev) => (prev === nextFrom ? prev : nextFrom));
+    setDateTo((prev) => (prev === nextTo ? prev : nextTo));
+  }, []);
+
+  const handleCalendarNav = (action: "prev" | "next" | "today") => {
+    const api = calendarRef.current?.getApi();
+    if (!api) return;
+
+    if (action === "prev") {
+      api.prev();
+      return;
+    }
+
+    if (action === "next") {
+      api.next();
+      return;
+    }
+
+    api.today();
+  };
+
+  useEffect(() => {
+    const isShiftFormModalOpen = showCreateForm || Boolean(editingShift);
+    if (!isShiftFormModalOpen || confirmState) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCloseShiftFormModal();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [showCreateForm, editingShift, confirmState, handleCloseShiftFormModal]);
+
+  const renderCalendarEvent = useCallback((arg: EventContentArg) => {
+    return (
+      <span className="fc-shift-event-title">
+        {arg.event.title}
+      </span>
+    );
+  }, []);
+
+  // ── Shared form fields for create & edit (single-column layout) ──
   const peopleOptions = activePeople.map((p) => ({
     value: p.id!,
     label: p.phoneNumber ? (p.name ?? "") : `${p.name ?? ""} — sin teléfono`,
@@ -480,39 +758,39 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
     onSubmit: (e: React.FormEvent) => void,
     submitLabel: string,
   ) => (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-5">
       {formError && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
           {formError}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex items-center gap-2">
-          <label className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Inicio *
           </label>
           <input
             type="datetime-local"
             value={startVal}
             onChange={(e) => onStartChange(e.target.value)}
-            className={inputCls + " w-56"}
+            className={inputCls + " w-full"}
             required
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Fin *
           </label>
           <input
             type="datetime-local"
             value={endVal}
             onChange={(e) => onEndChange(e.target.value)}
-            className={inputCls + " w-56"}
+            className={inputCls + " w-full"}
             required
           />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="shrink-0 text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Persona *
           </label>
           {activePeople.length === 0 ? (
@@ -520,7 +798,7 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
               Sin personas. Añádelas en Información.
             </p>
           ) : (
-            <div className="w-56">
+            <div className="w-full">
               <Select
                 placeholder="Seleccionar..."
                 options={peopleOptions}
@@ -530,9 +808,11 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
             </div>
           )}
         </div>
-        <Button type="submit" variant="primary" size="md" loading={isSubmitting} disabled={activePeople.length === 0}>
-          {submitLabel}
-        </Button>
+        <div className="pt-1">
+          <Button type="submit" variant="primary" size="md" loading={isSubmitting} disabled={activePeople.length === 0}>
+            {submitLabel}
+          </Button>
+        </div>
       </div>
     </form>
   );
@@ -597,188 +877,239 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
         </div>
       )}
 
-      {/* ── Edit shift form (appears above the table when editing) ── */}
-      {editingShift && (
-        <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-6 dark:border-indigo-800 dark:bg-indigo-950/30">
-          <div className="mb-4 flex items-center justify-between">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* ── Shifts table ── */}
+        <div className="rounded-xl border border-gray-200 bg-white xl:col-span-7 dark:border-gray-700 dark:bg-gray-900">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-700">
             <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-              Editar turno — {editingShift.personName}
+              Turnos {shifts.length > 0 && <span className="font-normal text-gray-400">({shifts.length})</span>}
             </h3>
-            <IconButton label="Cancelar edición" onClick={handleCancelEdit}>
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </IconButton>
-          </div>
-          {renderShiftForm(
-            editStart,
-            editEnd,
-            editPersonId,
-            setEditStart,
-            setEditEnd,
-            setEditPersonId,
-            editError,
-            updating,
-            handleUpdate,
-            "Guardar cambios",
-          )}
-        </div>
-      )}
-
-      {/* ── Shifts table ── */}
-      <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-            Turnos {shifts.length > 0 && <span className="font-normal text-gray-400">({shifts.length})</span>}
-          </h3>
-          <div className="flex items-center gap-2">
-            {!showCreateForm && !editingShift && (
+            <div className="flex items-center gap-2">
+              {!showCreateForm && !editingShift && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenCreateForm}
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Añadir turno
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setShowCreateForm(true)}
+                loading={generating}
+                onClick={handleGenerate}
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
                 </svg>
-                Añadir turno
+                Generar automáticamente
               </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              loading={generating}
-              onClick={handleGenerate}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-              </svg>
-              Generar automáticamente
-            </Button>
+            </div>
           </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+              <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Cargando turnos...
+            </div>
+          ) : shifts.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-sm text-gray-400">
+              <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+              </svg>
+              No hay turnos en este período
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left dark:border-gray-700">
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Persona</th>
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Inicio</th>
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Fin</th>
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Tiempo</th>
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-24">Estado</th>
+                    <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-20" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {shifts.map((shift) => {
+                    const status = getShiftStatus(shift.startTime, shift.endTime);
+                    const badge = statusBadge[status];
+                    return (
+                      <tr
+                        key={shift.id}
+                        className={`group hover:bg-gray-50 dark:hover:bg-gray-800/50 ${status === "activo" ? "bg-emerald-50/50 dark:bg-emerald-950/20" : ""}`}
+                      >
+                        <td className="px-6 py-3 text-gray-900 dark:text-white">
+                          {shift.personName ?? "—"}
+                        </td>
+                        <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                          {formatDate(shift.startTime)}
+                        </td>
+                        <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                          {formatDate(shift.endTime)}
+                        </td>
+                        <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
+                          {formatShiftDuration(shift.startTime, shift.endTime)}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>
+                            {badge.ping && (
+                              <span className="relative flex h-2 w-2">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                              </span>
+                            )}
+                            {badge.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3">
+                          {status !== "realizado" && (
+                            <div className="flex items-center gap-0.5">
+                              <IconButton label="Editar turno" tone="primary" onClick={() => handleStartEdit(shift)}>
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                </svg>
+                              </IconButton>
+                              <IconButton label="Eliminar turno" tone="danger" onClick={() => handleDelete(shift)}>
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                              </IconButton>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12 text-sm text-gray-400">
-            <svg className="mr-2 h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            Cargando turnos...
+        {/* ── Visual calendar ── */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4 xl:col-span-5 dark:border-gray-700 dark:bg-gray-900">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Calendario de turnos</h3>
+            <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Mes anterior"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => handleCalendarNav("prev")}
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
+                <h4 className="min-w-52 text-center text-2xl font-semibold capitalize text-gray-900 dark:text-white">
+                  {calendarMonthTitle}
+                </h4>
+                <button
+                  type="button"
+                  aria-label="Mes siguiente"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => handleCalendarNav("next")}
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                  </svg>
+                </button>
+            </div>
           </div>
-        ) : shifts.length === 0 ? (
-          <div className="flex flex-col items-center py-12 text-sm text-gray-400">
-            <svg className="mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-            </svg>
-            No hay turnos en este período
+          <div className="shift-calendar min-h-[680px]">
+            <FullCalendar
+              ref={calendarRef}
+              plugins={[dayGridPlugin]}
+              locale={esLocale}
+              initialView="dayGridMonth"
+              initialDate={calendarInitialDate}
+              firstDay={1}
+              height="auto"
+              fixedWeekCount
+              showNonCurrentDates
+              displayEventTime={false}
+              eventDisplay="block"
+              dayMaxEventRows={3}
+              headerToolbar={false}
+              datesSet={handleCalendarDatesSet}
+              events={shiftCalendarEvents}
+              eventContent={renderCalendarEvent}
+              eventClick={(info) => {
+                const shift = info.event.extendedProps.shift as ShiftResponse | undefined;
+                if (!shift) return;
+                if (getShiftStatus(shift.startTime, shift.endTime) !== "realizado") {
+                  handleStartEdit(shift);
+                }
+              }}
+            />
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left dark:border-gray-700">
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Persona</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Inicio</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Fin</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Tiempo</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-24">Estado</th>
-                  <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400 w-20" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {shifts.map((shift) => {
-                  const status = getShiftStatus(shift.startTime, shift.endTime);
-                  const badge = statusBadge[status];
-                  return (
-                    <tr
-                      key={shift.id}
-                      className={`group hover:bg-gray-50 dark:hover:bg-gray-800/50 ${status === "activo" ? "bg-emerald-50/50 dark:bg-emerald-950/20" : ""}`}
-                    >
-                      <td className="px-6 py-3 text-gray-900 dark:text-white">
-                        {shift.personName ?? "—"}
-                      </td>
-                      <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
-                        {formatDate(shift.startTime)}
-                      </td>
-                      <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
-                        {formatDate(shift.endTime)}
-                      </td>
-                      <td className="px-6 py-3 text-gray-600 dark:text-gray-400">
-                        {formatShiftDuration(shift.startTime, shift.endTime)}
-                      </td>
-                      <td className="px-6 py-3">
-                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>
-                          {badge.ping && (
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                            </span>
-                          )}
-                          {badge.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-3">
-                        {status !== "realizado" && (
-                          <div className="flex items-center gap-0.5">
-                            <IconButton label="Editar turno" tone="primary" onClick={() => handleStartEdit(shift)}>
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                              </svg>
-                            </IconButton>
-                            <IconButton label="Eliminar turno" tone="danger" onClick={() => handleDelete(shift)}>
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                              </svg>
-                            </IconButton>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* ── Create shift form (hidden by default, shown on toggle) ── */}
-      {showCreateForm && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-              Añadir turno
-            </h3>
-            <IconButton
-              label="Cerrar formulario"
-              onClick={() => {
-                setShowCreateForm(false);
-                setCreateError(null);
-                setNewStart("");
-                setNewEnd("");
-                setNewPersonId("");
-              }}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </IconButton>
+      {/* ── Create/Edit shift modal ── */}
+      {(showCreateForm || editingShift) && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              handleCloseShiftFormModal();
+            }
+          }}
+        >
+          <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl dark:bg-gray-900">
+            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {editingShift ? `Editar turno - ${editingShift.personName ?? "Sin persona"}` : "Añadir turno"}
+              </h3>
+              <IconButton
+                label="Cerrar formulario"
+                onClick={handleCloseShiftFormModal}
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </IconButton>
+            </div>
+            <div className="px-6 py-5">
+              {editingShift
+                ? renderShiftForm(
+                    editStart,
+                    editEnd,
+                    editPersonId,
+                    setEditStart,
+                    setEditEnd,
+                    setEditPersonId,
+                    editError,
+                    updating,
+                    handleUpdate,
+                    "Guardar cambios",
+                  )
+                : renderShiftForm(
+                    newStart,
+                    newEnd,
+                    newPersonId,
+                    setNewStart,
+                    setNewEnd,
+                    setNewPersonId,
+                    createError,
+                    creating,
+                    handleCreate,
+                    "Añadir turno",
+                  )}
+            </div>
           </div>
-          {renderShiftForm(
-            newStart,
-            newEnd,
-            newPersonId,
-            setNewStart,
-            setNewEnd,
-            setNewPersonId,
-            createError,
-            creating,
-            handleCreate,
-            "Añadir turno",
-          )}
         </div>
       )}
 

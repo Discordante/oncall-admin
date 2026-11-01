@@ -12,6 +12,9 @@
     "api:typecheck": "npm run api:spec && npm run typecheck"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.22",
+    "@fullcalendar/daygrid": "^6.1.22",
+    "@fullcalendar/react": "^6.1.22",
     "@hookform/resolvers": "^5.2.2",
     "@react-router/node": "8.0.0",
     "@react-router/serve": "8.0.0",
