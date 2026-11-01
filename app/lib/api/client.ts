@@ -1,7 +1,7 @@
 import createClient from "openapi-fetch";
 import type { paths } from "./schema";
 import { getJwt } from "../auth";
-import { env } from "../env";
+import { env, useDevProxy } from "../env";
 
 /**
  * Cliente HTTP tipado para la API Oncall.
@@ -21,7 +21,7 @@ import { env } from "../env";
  */
 
 export const api = createClient<paths>({
-  baseUrl: env.VITE_BACKEND_URL,
+  baseUrl: useDevProxy ? "" : env.VITE_BACKEND_URL,
   headers: {
     "Content-Type": "application/json",
   },

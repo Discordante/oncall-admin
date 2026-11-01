@@ -1,7 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "~/components/ui/Button";
 import { api } from "~/lib/api";
-import { formatDateTime, fromDateTimeLocal, toDateTimeLocal, endOfDayIso, endOfMonthDate, startOfDayIso, startOfPreviousMonthDate } from "~/lib/format";
+import {
+  formatDateTime,
+  fromDateTimeLocal,
+  toDateTimeLocal,
+  endOfDayIso,
+  startOfDayIso,
+  oneWeekAgoDate,
+  fourWeeksAheadDate,
+} from "~/lib/format";
 import type { components } from "~/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -10,6 +18,7 @@ import type { components } from "~/lib/api";
 type IncidentResponse = components["schemas"]["IncidentResponse"];
 type IncidentRequest = components["schemas"]["IncidentRequest"];
 type ApplicationResponse = components["schemas"]["ApplicationResponse"];
+type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 
 interface ApiErrorShape {
   errors?: { message?: string }[];
@@ -31,6 +40,20 @@ function formatDuration(seconds?: number | null): string {
   return `${s}s`;
 }
 
+function formatPhone(num?: string | null): string {
+  if (!num) return "—";
+  const digits = num.replace(/\D/g, "");
+  if (!digits) return "—";
+  const parts: string[] = [];
+  let remaining = digits;
+  while (remaining.length > 3) {
+    parts.unshift(remaining.slice(-3));
+    remaining = remaining.slice(0, -3);
+  }
+  parts.unshift(remaining);
+  return `+${parts.join(" ")}`;
+}
+
 const inputCls =
   "mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
   "placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 " +
@@ -42,11 +65,12 @@ const inputCls =
 interface IncidentModalProps {
   incident: IncidentResponse | null; // null = create mode
   applications: ApplicationResponse[];
+  sipId?: string;
   onSave: (id: string | null, req: IncidentRequest) => Promise<string | null>;
   onClose: () => void;
 }
 
-function IncidentModal({ incident, applications, onSave, onClose }: IncidentModalProps) {
+function IncidentModal({ incident, applications, sipId, onSave, onClose }: IncidentModalProps) {
   const isCreate = incident === null;
   const [title, setTitle] = useState(incident?.title ?? "");
   const [description, setDescription] = useState(incident?.description ?? "");
@@ -56,10 +80,70 @@ function IncidentModal({ incident, applications, onSave, onClose }: IncidentModa
   const [applicationId, setApplicationId] = useState(incident?.applicationId ?? "");
   const [endedAt, setEndedAt] = useState(toDateTimeLocal(incident?.endedAt));
   const [startedAt, setStartedAt] = useState(toDateTimeLocal(incident?.startedAt));
+  const [selectedCallIds, setSelectedCallIds] = useState<string[]>([]);
+  const [availableCalls, setAvailableCalls] = useState<CallRecordResponse[]>([]);
+  const [loadingCalls, setLoadingCalls] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hasLinkedCalls = (incident?.linkedCallsCount ?? 0) > 0;
+  const hasLinkedCalls = selectedCallIds.length > 0 || (incident?.linkedCallsCount ?? 0) > 0;
+
+  useEffect(() => {
+    if (selectedCallIds.length === 0) return;
+    const selected = availableCalls.filter((call) => selectedCallIds.includes(call.id ?? ""));
+    const earliest = selected.reduce<CallRecordResponse | null>((min, call) => {
+      if (!min) return call;
+      return (new Date(call.callStartedAt ?? 0).getTime() ?? 0) < (new Date(min.callStartedAt ?? 0).getTime() ?? 0)
+        ? call
+        : min;
+    }, null);
+
+    if (earliest?.callStartedAt) {
+      setStartedAt(toDateTimeLocal(earliest.callStartedAt));
+    }
+  }, [selectedCallIds, availableCalls]);
+
+  useEffect(() => {
+    if (!sipId) {
+      setAvailableCalls([]);
+      return;
+    }
+
+    const fetchCalls = async () => {
+      setLoadingCalls(true);
+      const { data, error: apiErr } = await api.GET("/api/v1/zadarma/calls-summary", {
+        params: {
+          query: {
+            start: startOfDayIso(oneWeekAgoDate()),
+            end: endOfDayIso(fourWeeksAheadDate()),
+            sip: sipId,
+          },
+        },
+      });
+
+      if (!apiErr && data?.data) {
+        const sorted = [...data.data].sort(
+          (a, b) => (new Date(b.callStartedAt ?? 0).getTime() ?? 0) - (new Date(a.callStartedAt ?? 0).getTime() ?? 0)
+        );
+        setAvailableCalls(sorted);
+      } else {
+        setAvailableCalls([]);
+      }
+      setLoadingCalls(false);
+    };
+
+    void fetchCalls();
+  }, [sipId]);
+
+  const toggleCall = (callId?: string) => {
+    if (!callId) return;
+    setSelectedCallIds((prev) => {
+      const next = prev.includes(callId)
+        ? prev.filter((id) => id !== callId)
+        : [...prev, callId];
+      return next;
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +157,7 @@ function IncidentModal({ incident, applications, onSave, onClose }: IncidentModa
       bridgeOpened,
       startedAt: !hasLinkedCalls ? fromDateTimeLocal(startedAt) : undefined,
       endedAt: fromDateTimeLocal(endedAt),
-      callRecordIds: undefined,
+      callRecordIds: selectedCallIds.length > 0 ? selectedCallIds : undefined,
     });
     setSaving(false);
     if (err) { setError(err); } else { onClose(); }
@@ -81,61 +165,146 @@ function IncidentModal({ incident, applications, onSave, onClose }: IncidentModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl dark:bg-gray-900">
+      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-xl dark:bg-gray-900">
         <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">
             {isCreate ? "Nueva incidencia" : "Editar incidencia"}
           </h2>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 p-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="Descripción breve" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Aplicación <span className="font-normal text-gray-400">(opcional)</span>
-            </label>
-            <select value={applicationId} onChange={e => setApplicationId(e.target.value)} className={inputCls}>
-              <option value="">Sin aplicación</option>
-              {applications.map(a => (
-                <option key={a.id} value={a.id!}>{a.name}</option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              Puedes asignarla más adelante, cuando conozcas la aplicación afectada.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className={inputCls} placeholder="Detalles de la incidencia…" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {!hasLinkedCalls && (
+        <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.95fr)] lg:items-start">
+            <div className="space-y-5 self-stretch">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Inicio</label>
-                <input type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} className={inputCls} />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
+                <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="Descripción breve" />
               </div>
-            )}
-            <div className={hasLinkedCalls ? "col-span-2" : ""}>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Fecha de fin <span className="font-normal text-gray-400">(opcional)</span>
-              </label>
-              <input type="datetime-local" value={endedAt} onChange={e => setEndedAt(e.target.value)} className={inputCls} />
-              <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-                Déjala vacía mientras la incidencia siga abierta.
-              </p>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Aplicación <span className="font-normal text-gray-400">(opcional)</span>
+                </label>
+                <select value={applicationId} onChange={e => setApplicationId(e.target.value)} className={inputCls}>
+                  <option value="">Sin aplicación</option>
+                  {applications.map(a => (
+                    <option key={a.id} value={a.id!}>{a.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  Puedes asignarla más adelante, cuando conozcas la aplicación afectada.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} className={`${inputCls} resize-y`} placeholder="Detalles de la incidencia…" />
+              </div>
+            </div>
+
+            <div className="space-y-5 self-stretch">
+              <div className="flex min-h-[230px] flex-col rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Llamadas asociadas</label>
+                  <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                    {selectedCallIds.length}
+                  </span>
+                </div>
+
+                {!sipId && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    No hay SIP configurado para este grupo, así que no se pueden preseleccionar llamadas.
+                  </p>
+                )}
+
+                {sipId && loadingCalls && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Cargando llamadas recientes…</p>
+                )}
+
+                {sipId && !loadingCalls && availableCalls.length === 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    No hay llamadas recientes para este SIP en el rango actual.
+                  </p>
+                )}
+
+                {sipId && availableCalls.length > 0 && (
+                  <div className="mt-1 flex-1 space-y-2 overflow-y-auto pr-1">
+                    {availableCalls.map((call) => {
+                      const isSelected = selectedCallIds.includes(call.id ?? "");
+                      const disabled = !!call.incidentId && call.incidentId !== incident?.id;
+
+                      return (
+                        <label
+                          key={call.id}
+                          className={`flex w-full cursor-pointer items-start gap-3 rounded-lg border p-2 ${
+                            isSelected
+                              ? "border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/40"
+                              : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
+                          } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={disabled}
+                            onChange={() => toggleCall(call.id)}
+                            className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">
+                                {formatPhone(call.callerNumber)}
+                              </span>
+                              <span className="whitespace-nowrap text-[10px] text-gray-400 dark:text-gray-500">
+                                {formatDateTime(call.callStartedAt)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400">
+                              {call.destinationNumber && <span>Destino: {call.destinationNumber}</span>}
+                              {call.disposition && <span>{call.disposition}</span>}
+                              {disabled && <span className="text-amber-600 dark:text-amber-300">Ya vinculada</span>}
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Inicio</label>
+                  <input type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Fecha de fin <span className="font-normal text-gray-400">(opcional)</span>
+                  </label>
+                  <input type="datetime-local" value={endedAt} onChange={e => setEndedAt(e.target.value)} className={inputCls} />
+                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Déjala vacía mientras la incidencia siga abierta.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/60">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Se abrió bridge con el proveedor</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={bridgeOpened}
+                  onClick={() => setBridgeOpened((prev) => !prev)}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${
+                    bridgeOpened ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-700"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                      bridgeOpened ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
             </div>
           </div>
-
-          <label className="flex cursor-pointer items-center gap-3">
-            <input type="checkbox" checked={bridgeOpened} onChange={e => setBridgeOpened(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-            <span className="text-sm text-gray-700 dark:text-gray-300">Se abrió bridge con el proveedor</span>
-          </label>
 
           {error && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
@@ -269,17 +438,18 @@ function IncidentDetailModal({ incident, onClose }: IncidentDetailModalProps) {
 interface IncidentsTabProps {
   groupId: string;
   applications: ApplicationResponse[];
+  sipId?: string;
 }
 
-export function IncidentsTab({ groupId, applications }: IncidentsTabProps) {
+export function IncidentsTab({ groupId, applications, sipId }: IncidentsTabProps) {
   const [incidents, setIncidents] = useState<IncidentResponse[]>([]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
   const [page, setPage] = useState(0);
   const [appFilter, setAppFilter] = useState<string>("");
   // Default range: previous month + current month
-  const [dateFrom, setDateFrom] = useState(startOfPreviousMonthDate);
-  const [dateTo, setDateTo] = useState(endOfMonthDate);
+  const [dateFrom, setDateFrom] = useState(oneWeekAgoDate);
+  const [dateTo, setDateTo] = useState(fourWeeksAheadDate);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [modalIncident, setModalIncident] = useState<IncidentResponse | null | undefined>(undefined); // undefined=closed, null=create, IncidentResponse=edit
@@ -570,6 +740,7 @@ export function IncidentsTab({ groupId, applications }: IncidentsTabProps) {
         <IncidentModal
           incident={modalIncident}
           applications={applications}
+          sipId={sipId}
           onSave={handleSave}
           onClose={() => setModalIncident(undefined)}
         />

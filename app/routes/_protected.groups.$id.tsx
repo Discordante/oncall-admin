@@ -242,7 +242,7 @@ export default function GroupDashboard() {
 
       {/* Info tab: hidden instead of unmounted to preserve form state */}
       <div className={activeTab === "info" ? "" : "hidden"}>
-        <div className="max-w-2xl space-y-6">
+        <div className="mx-auto w-full max-w-2xl space-y-6">
           <GroupForm
             key={group.id}
             people={people}
@@ -293,7 +293,11 @@ export default function GroupDashboard() {
 
       {/* Incidents tab */}
       {activeTab === "incidents" && (
-        <IncidentsTab groupId={group.id!} applications={group.applications ?? []} />
+        <IncidentsTab
+          groupId={group.id!}
+          applications={group.applications ?? []}
+          sipId={group.zadarmaSipId ?? undefined}
+        />
       )}
     </div>
   );

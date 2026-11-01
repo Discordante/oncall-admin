@@ -65,6 +65,16 @@ export function startOfPreviousMonthDate(): string {
     .toFormat("yyyy-MM-dd");
 }
 
+/** Date 7 days ago in the app timezone. Used to match the shift range selector. */
+export function oneWeekAgoDate(): string {
+  return DateTime.now().setZone(APP_TIMEZONE).minus({ days: 7 }).toFormat("yyyy-MM-dd");
+}
+
+/** Date 28 days in the future in the app timezone. Used to match the shift range selector. */
+export function fourWeeksAheadDate(): string {
+  return DateTime.now().setZone(APP_TIMEZONE).plus({ days: 28 }).toFormat("yyyy-MM-dd");
+}
+
 /** Last day of the current month as "yyyy-MM-dd" in the app timezone. */
 export function endOfMonthDate(): string {
   return DateTime.now().setZone(APP_TIMEZONE).endOf("month").toFormat("yyyy-MM-dd");

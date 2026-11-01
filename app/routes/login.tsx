@@ -1,6 +1,7 @@
 import { redirect, useSearchParams } from "react-router";
 import type { Route } from "./+types/login";
 import { getPayload, getBackendAuthUrl } from "~/lib/auth";
+import { env, useDevProxy } from "~/lib/env";
 import pkg from "../../package.json";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +22,8 @@ export async function clientLoader({ request }: Route.ClientLoaderArgs) {
 export default function Login() {
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
+  const isLocalDev = import.meta.env.DEV;
+  const hasDevJwt = Boolean(env.VITE_DEV_JWT?.trim());
 
   const ERROR_MESSAGES: Record<string, string> = {
     unauthorized: "No tienes permiso para acceder.",
@@ -48,6 +51,22 @@ export default function Login() {
             Inicia sesión con tu cuenta de Google corporativa
           </p>
         </div>
+
+        {isLocalDev && (useDevProxy || hasDevJwt) && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+            <p className="font-medium">Modo desarrollo local activo</p>
+            <p className="mt-1">
+              {useDevProxy
+                ? "API/OAuth salen por proxy de Vite (same-origin local)."
+                : "Proxy de Vite desactivado; se usa backend remoto directo."}
+            </p>
+            {hasDevJwt && (
+              <p className="mt-1">
+                Se detecto VITE_DEV_JWT y se reutilizara para autenticar peticiones en local.
+              </p>
+            )}
+          </div>
+        )}
 
         {errorMessage && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">

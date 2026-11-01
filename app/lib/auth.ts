@@ -4,6 +4,8 @@
 // a JWT token in the URL after successful authentication.
 // ---------------------------------------------------------------------------
 
+import { env, useDevProxy } from "./env";
+
 const JWT_KEY = "oncall_jwt";
 
 export interface JwtPayload {
@@ -14,11 +16,23 @@ export interface JwtPayload {
   exp: number;
 }
 
+function ensureDevJwtSeeded(): void {
+  if (!import.meta.env.DEV) return;
+
+  const devJwt = env.VITE_DEV_JWT?.trim();
+  if (!devJwt) return;
+
+  if (!localStorage.getItem(JWT_KEY)) {
+    localStorage.setItem(JWT_KEY, devJwt);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Store / retrieve / clear the JWT in localStorage
 // ---------------------------------------------------------------------------
 
 export function getJwt(): string | null {
+  ensureDevJwtSeeded();
   return localStorage.getItem(JWT_KEY);
 }
 
@@ -61,8 +75,10 @@ export function getPayload(): JwtPayload | null {
 // ---------------------------------------------------------------------------
 
 export function getBackendAuthUrl(): string {
-  const base = import.meta.env.VITE_BACKEND_URL;
-  return `${base}/oauth2/authorization/google`;
+  if (useDevProxy) {
+    return "/oauth2/authorization/google";
+  }
+  return `${env.VITE_BACKEND_URL}/oauth2/authorization/google`;
 }
 
 // ---------------------------------------------------------------------------

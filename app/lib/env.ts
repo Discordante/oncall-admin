@@ -19,6 +19,16 @@ const envSchema = z.object({
     .string()
     .url("VITE_BACKEND_URL debe ser una URL válida")
     .min(1, "VITE_BACKEND_URL es obligatoria"),
+  /**
+   * En desarrollo local, activa proxy de Vite para evitar CORS
+   * consumiendo backend remoto con rutas relativas (/api, /oauth2...).
+   */
+  VITE_USE_DEV_PROXY: z.enum(["true", "false"]).optional(),
+  /**
+   * JWT opcional para desarrollo local. Si existe y no hay token guardado,
+   * se inyecta automáticamente en localStorage.
+   */
+  VITE_DEV_JWT: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(import.meta.env);
@@ -39,6 +49,11 @@ if (!parsed.success) {
 
 export const env = parsed.data ?? {
   VITE_BACKEND_URL: "http://localhost:5173",
+  VITE_USE_DEV_PROXY: "true",
+  VITE_DEV_JWT: "",
 };
+
+export const useDevProxy =
+  import.meta.env.DEV && (env.VITE_USE_DEV_PROXY ?? "true") !== "false";
 
 export type Env = z.infer<typeof envSchema>;

@@ -214,13 +214,8 @@ export function GroupForm({
   });
 
   const telegramBotEnabled = watch("telegramBotEnabled");
-  const zadarmaEnabled = watch("zadarmaEnabled");
   const [serverError, setServerError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
-  // Accordion state for expand/collapse (separate from enable/disable toggle)
-  const [telegramExpanded, setTelegramExpanded] = useState(defaultValues?.telegramBotEnabled ?? false);
-  const [zadarmaExpanded, setZadarmaExpanded] = useState(defaultValues?.zadarmaEnabled ?? false);
 
   // Build coloured options once
   const peopleOptions = assignChipColors(
@@ -275,7 +270,7 @@ export function GroupForm({
         <h3 className="text-base font-semibold text-gray-900 dark:text-white">
           Información básica
         </h3>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Nombre del grupo *
@@ -317,70 +312,50 @@ export function GroupForm({
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">
             Configuración Zadarma
           </h3>
-          <div className="flex items-center gap-2">
-            <label className="relative inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                {...register("zadarmaEnabled")}
-                className="peer sr-only"
-              />
-              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-            </label>
-            <button
-              type="button"
-              onClick={() => setZadarmaExpanded((prev) => !prev)}
-              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-              aria-label={zadarmaExpanded ? "Colapsar" : "Expandir"}
-            >
-              <svg
-                className={`h-4 w-4 transition-transform ${zadarmaExpanded ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
-            </button>
-          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              {...register("zadarmaEnabled")}
+              className="peer sr-only"
+            />
+            <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
+          </label>
         </div>
-        {zadarmaExpanded && (
-          <div className="mt-4 space-y-4">
-            <Controller
-              control={control}
-              name="zadarmaRedirectionType"
-              render={({ field }) => (
-                <Select
-                  label="Tipo de redirección"
-                  options={[
-                    { value: "sip", label: "SIP" },
-                    { value: "pbx", label: "PBX", disabled: true },
-                  ]}
-                  value={field.value}
-                  onChange={(val) => field.onChange(val)}
-                />
-              )}
-            />
-            <Controller
-              control={control}
-              name="zadarmaSipId"
-              render={({ field }) => (
-                <Select
-                  label="ID del SIP"
-                  placeholder={sipOptions ? "Seleccionar SIP..." : "Ej: 921495"}
-                  options={
-                    sipOptions
-                      ? sipSelectOptions
-                      : [{ value: field.value || "", label: field.value || "Sin SIPs cargados" }]
-                  }
-                  value={field.value}
-                  onChange={(val) => field.onChange(val)}
-                  error={errors.zadarmaSipId?.message}
-                />
-              )}
-            />
-          </div>
-        )}
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Controller
+            control={control}
+            name="zadarmaRedirectionType"
+            render={({ field }) => (
+              <Select
+                label="Tipo de redirección"
+                options={[
+                  { value: "sip", label: "SIP" },
+                  { value: "pbx", label: "PBX", disabled: true },
+                ]}
+                value={field.value}
+                onChange={(val) => field.onChange(val)}
+              />
+            )}
+          />
+          <Controller
+            control={control}
+            name="zadarmaSipId"
+            render={({ field }) => (
+              <Select
+                label="ID del SIP"
+                placeholder={sipOptions ? "Seleccionar SIP..." : "Ej: 921495"}
+                options={
+                  sipOptions
+                    ? sipSelectOptions
+                    : [{ value: field.value || "", label: field.value || "Sin SIPs cargados" }]
+                }
+                value={field.value}
+                onChange={(val) => field.onChange(val)}
+                error={errors.zadarmaSipId?.message}
+              />
+            )}
+          />
+        </div>
       </div>
 
       {/* Telegram config */}
@@ -389,110 +364,90 @@ export function GroupForm({
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">
             Integración Telegram
           </h3>
-          <div className="flex items-center gap-2">
-            <label className="relative inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                {...register("telegramBotEnabled")}
-                className="peer sr-only"
-              />
-              <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
-            </label>
-            <button
-              type="button"
-              onClick={() => setTelegramExpanded((prev) => !prev)}
-              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-              aria-label={telegramExpanded ? "Colapsar" : "Expandir"}
-            >
-              <svg
-                className={`h-4 w-4 transition-transform ${telegramExpanded ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2}
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-              </svg>
-            </button>
-          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              {...register("telegramBotEnabled")}
+              className="peer sr-only"
+            />
+            <div className="h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 dark:bg-gray-600 dark:peer-focus:ring-indigo-800"></div>
+          </label>
         </div>
-        {telegramExpanded && (
-          <div className="mt-4 space-y-4">
-            <PasswordField
-              id="telegramBotToken"
-              label="Token del Bot *"
-              register={register("telegramBotToken", {
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <PasswordField
+            id="telegramBotToken"
+            label="Token del Bot *"
+            register={register("telegramBotToken", {
+              onChange: (e) => {
+                if (!e.target.value && telegramBotEnabled) {
+                  setValue("telegramBotEnabled", false, { shouldDirty: false });
+                }
+              },
+            })}
+            placeholder="Token del bot de Telegram"
+            error={errors.telegramBotToken?.message}
+          />
+          <div>
+            <label htmlFor="telegramGroupChatId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              ID del Chat/Grupo *
+            </label>
+            <input
+              id="telegramGroupChatId"
+              type="text"
+              {...register("telegramGroupChatId", {
                 onChange: (e) => {
                   if (!e.target.value && telegramBotEnabled) {
                     setValue("telegramBotEnabled", false, { shouldDirty: false });
                   }
                 },
               })}
-              placeholder="Token del bot de Telegram"
-              error={errors.telegramBotToken?.message}
+              className={inputCls}
+              placeholder="Ej: -1001234567890"
             />
-            <div>
-              <label htmlFor="telegramGroupChatId" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                ID del Chat/Grupo *
-              </label>
-              <input
-                id="telegramGroupChatId"
-                type="text"
-                {...register("telegramGroupChatId", {
-                  onChange: (e) => {
-                    if (!e.target.value && telegramBotEnabled) {
-                      setValue("telegramBotEnabled", false, { shouldDirty: false });
-                    }
-                  },
-                })}
-                className={inputCls}
-                placeholder="Ej: -1001234567890"
-              />
-              {errors.telegramGroupChatId && (
-                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.telegramGroupChatId.message}</p>
-              )}
-            </div>
-            {telegramGroupInviteLink && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Link de invitación
-                </label>
-                <div className="relative mt-1">
-                  <input
-                    type="url"
-                    readOnly
-                    value={telegramGroupInviteLink}
-                    className={inputCls + " pr-10"}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(telegramGroupInviteLink);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                    tabIndex={-1}
-                    aria-label="Copiar link"
-                  >
-                    {copied ? (
-                      <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Generado automáticamente al configurar el bot
-                </p>
-              </div>
+            {errors.telegramGroupChatId && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.telegramGroupChatId.message}</p>
             )}
           </div>
-        )}
+          {telegramGroupInviteLink && (
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Link de invitación
+              </label>
+              <div className="relative mt-1">
+                <input
+                  type="url"
+                  readOnly
+                  value={telegramGroupInviteLink}
+                  className={inputCls + " pr-10"}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(telegramGroupInviteLink);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  tabIndex={-1}
+                  aria-label="Copiar link"
+                >
+                  {copied ? (
+                    <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Generado automáticamente al configurar el bot
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* People selector */}

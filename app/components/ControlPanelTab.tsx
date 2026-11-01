@@ -3,12 +3,12 @@ import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
 import {
   endOfDayIso,
-  endOfMonthDate,
   formatDate,
   formatDateTime,
   nowMillis,
   startOfDayIso,
   startOfMonthDate,
+  todayDate,
   toMillis,
 } from "~/lib/format";
 import type { components } from "~/lib/api";
@@ -21,6 +21,14 @@ type RedirectionInfo = components["schemas"]["RedirectionInfo"];
 type ShiftRecord = components["schemas"]["ShiftResponse"];
 type SipInfoResponse = components["schemas"]["SipInfoResponse"];
 type CallRecordResponse = components["schemas"]["CallRecordResponse"];
+
+interface ApiErrorShape {
+  errors?: { message?: string }[];
+}
+
+function getApiError(err: unknown, fallback: string): string {
+  return (err as ApiErrorShape | undefined)?.errors?.[0]?.message ?? fallback;
+}
 
 // ---------------------------------------------------------------------------
 // Formatters
@@ -109,20 +117,25 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
   }, [sipId]);
 
   // ── Normalize phone numbers for comparison ──
+  const normalizePhone = (raw?: string | null): string | null => {
+    if (!raw) return null;
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return null;
+    return digits.length > 9 ? digits.slice(-9) : digits;
+  };
+
   const groupPhoneNumbers = new Set(
     groupPeople
       .map((p) => p.phoneNumber)
       .filter(Boolean)
-      .map((n) => n!.replace(/\D/g, ""))
+      .map((n) => normalizePhone(n))
+      .filter((n): n is string => Boolean(n))
   );
 
   const isGroupMemberNumber = (callerNumber?: string | null): boolean => {
-    if (!callerNumber) return false;
-    const fromStr = callerNumber.replace(/\D/g, "");
-    for (const phone of groupPhoneNumbers) {
-      if (phone && (fromStr.includes(phone) || phone.includes(fromStr))) return true;
-    }
-    return false;
+    const caller = normalizePhone(callerNumber);
+    if (!caller) return false;
+    return groupPhoneNumbers.has(caller);
   };
 
   // ── Fetch all panel data ──
@@ -133,7 +146,7 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
 
     const nowMs = nowMillis();
     const fromISO = startOfDayIso(startOfMonthDate());
-    const toISO = endOfDayIso(endOfMonthDate());
+    const toISO = endOfDayIso(todayDate());
 
     const [directNumRes, redirRes, shiftsRes, callsRes] = await Promise.allSettled([
       api.GET("/api/v1/zadarma/direct-numbers"),
@@ -149,7 +162,7 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
         params: {
           query: {
             start: `${startOfMonthDate()} 00:00:00`,
-            end: `${endOfMonthDate()} 23:59:59`,
+            end: `${todayDate()} 23:59:59`,
             sip: sipFilter,
           },
         },
@@ -196,9 +209,16 @@ export function ControlPanelTab({ sipId, groupId, groupPeople = [] }: ControlPan
 
     // Monthly calls (excluding check calls: originated from a registered person's phone)
     if (callsRes.status === "fulfilled") {
-      const allCalls = callsRes.value.data?.data ?? [];
-      const realCalls = allCalls.filter((c) => c.checkCall !== true && !isGroupMemberNumber(c.callerNumber));
-      setMonthCalls(realCalls);
+      const { data, error: callsErr } = callsRes.value;
+      if (callsErr) {
+        setError(getApiError(callsErr, "No se pudieron cargar las llamadas del mes"));
+      } else {
+        const allCalls = data?.data ?? [];
+        const realCalls = allCalls.filter((c) => c.checkCall !== true && !isGroupMemberNumber(c.callerNumber));
+        setMonthCalls(realCalls);
+      }
+    } else {
+      setError("No se pudieron cargar las llamadas del mes");
     }
 
     setLoading(false);

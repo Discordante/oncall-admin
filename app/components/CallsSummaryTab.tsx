@@ -4,10 +4,10 @@ import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
 import {
   endOfDayIso,
-  endOfMonthDate,
   formatDateTime,
+  fourWeeksAheadDate,
+  oneWeekAgoDate,
   startOfDayIso,
-  startOfMonthDate,
   toMillis,
 } from "~/lib/format";
 import type { components } from "~/lib/api";
@@ -116,8 +116,8 @@ interface CallsSummaryTabProps {
 }
 
 export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSummaryTabProps) {
-  const [dateFrom, setDateFrom] = useState(startOfMonthDate);
-  const [dateTo, setDateTo] = useState(endOfMonthDate);
+  const [dateFrom, setDateFrom] = useState(oneWeekAgoDate);
+  const [dateTo, setDateTo] = useState(fourWeeksAheadDate);
   const [sipFilter, setSipFilter] = useState(sipId ?? "");
 
   const [data, setData] = useState<CallRecordResponse[] | null>(null);
