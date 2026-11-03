@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import Select from "react-select";
 import { Button } from "~/components/ui/Button";
 import { api } from "~/lib/api";
 import {
@@ -23,6 +24,13 @@ type CallRecordResponse = components["schemas"]["CallRecordResponse"];
 interface ApiErrorShape {
   errors?: { message?: string }[];
 }
+
+interface CallOption {
+  value: string;
+  label: string;
+  isDisabled?: boolean;
+}
+
 function getApiError(err: unknown, fallback: string): string {
   return (err as ApiErrorShape | undefined)?.errors?.[0]?.message ?? fallback;
 }
@@ -80,16 +88,33 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
   const [applicationId, setApplicationId] = useState(incident?.applicationId ?? "");
   const [endedAt, setEndedAt] = useState(toDateTimeLocal(incident?.endedAt));
   const [startedAt, setStartedAt] = useState(toDateTimeLocal(incident?.startedAt));
+  const [startedAtTouched, setStartedAtTouched] = useState(false);
   const [selectedCallIds, setSelectedCallIds] = useState<string[]>([]);
   const [availableCalls, setAvailableCalls] = useState<CallRecordResponse[]>([]);
+  const [initializedLinkedCalls, setInitializedLinkedCalls] = useState(false);
   const [loadingCalls, setLoadingCalls] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const hasLinkedCalls = selectedCallIds.length > 0 || (incident?.linkedCallsCount ?? 0) > 0;
+  const callOptions = useMemo<CallOption[]>(() => {
+    return availableCalls
+      .filter((call): call is CallRecordResponse & { id: string } => Boolean(call.id))
+      .map((call) => {
+        return {
+          value: call.id,
+          label: `${formatPhone(call.callerNumber)} · ${formatDateTime(call.callStartedAt)}`,
+          isDisabled: !!call.incidentId && call.incidentId !== incident?.id,
+        };
+      });
+  }, [availableCalls, incident?.id]);
+
+  const selectedCallOptions = useMemo(
+    () => callOptions.filter((option) => selectedCallIds.includes(option.value)),
+    [callOptions, selectedCallIds]
+  );
 
   useEffect(() => {
-    if (selectedCallIds.length === 0) return;
+    if (selectedCallIds.length === 0 || startedAtTouched) return;
     const selected = availableCalls.filter((call) => selectedCallIds.includes(call.id ?? ""));
     const earliest = selected.reduce<CallRecordResponse | null>((min, call) => {
       if (!min) return call;
@@ -101,7 +126,26 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
     if (earliest?.callStartedAt) {
       setStartedAt(toDateTimeLocal(earliest.callStartedAt));
     }
-  }, [selectedCallIds, availableCalls]);
+  }, [selectedCallIds, availableCalls, startedAtTouched]);
+
+  useEffect(() => {
+    if (!incident?.id || initializedLinkedCalls || availableCalls.length === 0) return;
+
+    const linkedIds = availableCalls
+      .filter((call) => call.incidentId === incident.id && Boolean(call.id))
+      .map((call) => call.id!)
+      .filter((id, index, arr) => arr.indexOf(id) === index);
+
+    if (linkedIds.length > 0) {
+      setSelectedCallIds(linkedIds);
+    }
+    setInitializedLinkedCalls(true);
+  }, [incident?.id, availableCalls, initializedLinkedCalls]);
+
+  useEffect(() => {
+    if (incident?.id) return;
+    setInitializedLinkedCalls(true);
+  }, [incident?.id]);
 
   useEffect(() => {
     if (!sipId) {
@@ -135,16 +179,6 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
     void fetchCalls();
   }, [sipId]);
 
-  const toggleCall = (callId?: string) => {
-    if (!callId) return;
-    setSelectedCallIds((prev) => {
-      const next = prev.includes(callId)
-        ? prev.filter((id) => id !== callId)
-        : [...prev, callId];
-      return next;
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) { setError("El título es obligatorio"); return; }
@@ -155,7 +189,7 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
       description: description || undefined,
       applicationId: applicationId || undefined,
       bridgeOpened,
-      startedAt: !hasLinkedCalls ? fromDateTimeLocal(startedAt) : undefined,
+      startedAt: fromDateTimeLocal(startedAt),
       endedAt: fromDateTimeLocal(endedAt),
       callRecordIds: selectedCallIds.length > 0 ? selectedCallIds : undefined,
     });
@@ -172,13 +206,25 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
           </h2>
         </div>
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.95fr)] lg:items-start">
-            <div className="space-y-5 self-stretch">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.95fr)]">
+            <div className="flex min-h-0 flex-col gap-5 self-stretch">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Título</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} className={inputCls} placeholder="Descripción breve" />
               </div>
 
+              <div className="flex min-h-0 flex-1 flex-col">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  className={`${inputCls} min-h-[260px] flex-1 resize-none`}
+                  placeholder="Detalles de la incidencia…"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-5 self-stretch">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Aplicación <span className="font-normal text-gray-400">(opcional)</span>
@@ -194,18 +240,11 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={8} className={`${inputCls} resize-y`} placeholder="Detalles de la incidencia…" />
-              </div>
-            </div>
-
-            <div className="space-y-5 self-stretch">
-              <div className="flex min-h-[230px] flex-col rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60">
+              <div className="space-y-2">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Llamadas asociadas</label>
                   <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                    {selectedCallIds.length}
+                    {selectedCallOptions.length}
                   </span>
                 </div>
 
@@ -226,45 +265,39 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
                 )}
 
                 {sipId && availableCalls.length > 0 && (
-                  <div className="mt-1 flex-1 space-y-2 overflow-y-auto pr-1">
-                    {availableCalls.map((call) => {
-                      const isSelected = selectedCallIds.includes(call.id ?? "");
-                      const disabled = !!call.incidentId && call.incidentId !== incident?.id;
-
-                      return (
-                        <label
-                          key={call.id}
-                          className={`flex w-full cursor-pointer items-start gap-3 rounded-lg border p-2 ${
-                            isSelected
-                              ? "border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/40"
-                              : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900"
-                          } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            disabled={disabled}
-                            onChange={() => toggleCall(call.id)}
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="truncate text-sm font-medium text-gray-800 dark:text-gray-200">
-                                {formatPhone(call.callerNumber)}
-                              </span>
-                              <span className="whitespace-nowrap text-[10px] text-gray-400 dark:text-gray-500">
-                                {formatDateTime(call.callStartedAt)}
-                              </span>
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-500 dark:text-gray-400">
-                              {call.destinationNumber && <span>Destino: {call.destinationNumber}</span>}
-                              {call.disposition && <span>{call.disposition}</span>}
-                              {disabled && <span className="text-amber-600 dark:text-amber-300">Ya vinculada</span>}
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })}
+                  <div className="mt-1">
+                    <Select<CallOption, true>
+                      unstyled
+                      isMulti
+                      options={callOptions}
+                      value={selectedCallOptions}
+                      isClearable={false}
+                      closeMenuOnSelect={false}
+                      hideSelectedOptions={false}
+                      isLoading={loadingCalls}
+                      isOptionDisabled={(option) => !!option.isDisabled}
+                      placeholder="Selecciona una o varias llamadas"
+                      noOptionsMessage={() => "No hay llamadas disponibles"}
+                      onChange={(options) => setSelectedCallIds(options.map((option) => option.value))}
+                      classNames={{
+                        container: () => "w-full",
+                        control: () =>
+                          "min-h-[42px] rounded-lg border border-gray-700 bg-gray-800 px-2 text-sm text-gray-100",
+                        valueContainer: () => "gap-1 py-1",
+                        input: () => "text-sm text-gray-100",
+                        placeholder: () => "text-sm text-gray-400",
+                        indicatorsContainer: () => "text-gray-400",
+                        dropdownIndicator: () => "px-1 text-gray-400 hover:text-gray-300",
+                        clearIndicator: () => "px-1 text-gray-400 hover:text-gray-300",
+                        menu: () => "mt-1 rounded-lg border border-gray-700 bg-gray-800 shadow-xl",
+                        menuList: () => "max-h-72 overflow-y-auto p-1",
+                        option: (state) =>
+                          `rounded px-2 py-2 text-sm ${state.isDisabled ? "text-gray-500" : "text-gray-200"} ${state.isFocused ? "bg-indigo-950/40" : ""} ${state.isSelected ? "bg-indigo-900/60" : ""}`,
+                        multiValue: () => "rounded bg-indigo-900/70",
+                        multiValueLabel: () => "px-1 text-xs text-indigo-100",
+                        multiValueRemove: () => "rounded-r px-1 text-indigo-200 hover:bg-indigo-800 hover:text-white",
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -272,7 +305,18 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Inicio</label>
-                  <input type="datetime-local" value={startedAt} onChange={e => setStartedAt(e.target.value)} className={inputCls} />
+                  <input
+                    type="datetime-local"
+                    value={startedAt}
+                    onChange={e => {
+                      setStartedAtTouched(true);
+                      setStartedAt(e.target.value);
+                    }}
+                    className={inputCls}
+                  />
+                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                    Si asocias llamadas, se propone automáticamente la primera fecha detectada, pero puedes editarla libremente.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
