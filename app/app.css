@@ -143,6 +143,16 @@ body {
   background: color-mix(in srgb, var(--shift-cal-today-bg) 35%, var(--shift-cal-bg));
 }
 
+.shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-frame {
+  background: color-mix(in srgb, var(--shift-cal-today-bg) 58%, var(--shift-cal-bg));
+  box-shadow: inset 0 0 0 2px rgb(59 130 246 / 0.7);
+}
+
+.shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-number {
+  color: rgb(30 64 175);
+  font-weight: 700;
+}
+
 .shift-calendar .fc-shift-event-title {
   display: block;
   overflow: hidden;
@@ -170,6 +180,14 @@ body {
   filter: saturate(0.7);
 }
 
+:is(.dark, [data-theme="dark"]) .shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-frame {
+  box-shadow: inset 0 0 0 2px rgb(96 165 250 / 0.75);
+}
+
+:is(.dark, [data-theme="dark"]) .shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-number {
+  color: rgb(191 219 254);
+}
+
 @media (prefers-color-scheme: dark) {
   .shift-calendar .fc {
     --shift-cal-bg: rgb(17 24 39);
@@ -189,5 +207,13 @@ body {
   .shift-calendar .fc .fc-daygrid-event.fc-shift-past {
     opacity: 0.42;
     filter: saturate(0.7);
+  }
+
+  .shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-frame {
+    box-shadow: inset 0 0 0 2px rgb(96 165 250 / 0.75);
+  }
+
+  .shift-calendar .fc .fc-daygrid-day.fc-shift-selected-day .fc-daygrid-day-number {
+    color: rgb(191 219 254);
   }
 }

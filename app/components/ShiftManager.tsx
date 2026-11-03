@@ -198,7 +198,27 @@ function formatShiftDuration(startTime?: string, endTime?: string): string {
   const days = Math.floor(totalMinutes / minutesPerDay);
   const hours = Math.floor((totalMinutes % minutesPerDay) / 60);
 
+  if (days === 0) {
+    return `${hours} hora${hours === 1 ? "" : "s"}`;
+  }
+  if (hours === 0) {
+    return `${days} día${days === 1 ? "" : "s"}`;
+  }
   return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
+}
+
+function formatMinutesAsHoursAndMinutes(totalMinutes: number): string {
+  const safeMinutes = Math.max(0, Math.floor(totalMinutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes} min`;
+}
+
+function getTodayIsoDate(): string {
+  return DateTime.now().setZone(TZ).toISODate() ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -283,6 +303,8 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState(getTodayIsoDate);
+  const [hasManualDaySelection, setHasManualDaySelection] = useState(false);
   const calendarRef = useRef<FullCalendar | null>(null);
 
   // ── Load shifts ──
@@ -688,6 +710,79 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
     return base.toFormat("LLLL 'de' yyyy");
   }, [dateFrom]);
 
+  const selectedDayDetails = useMemo(() => {
+    if (!selectedDay) {
+      return {
+        label: "",
+        totalMinutes: 0,
+        shiftsCount: 0,
+        peopleCount: 0,
+        rows: [] as Array<{
+          shift: ShiftResponse;
+          rangeLabel: string;
+          coveredMinutes: number;
+        }>,
+      };
+    }
+
+    const dayStart = DateTime.fromISO(selectedDay, { zone: TZ }).startOf("day");
+    const dayEnd = dayStart.plus({ days: 1 });
+
+    if (!dayStart.isValid) {
+      return {
+        label: "",
+        totalMinutes: 0,
+        shiftsCount: 0,
+        peopleCount: 0,
+        rows: [] as Array<{
+          shift: ShiftResponse;
+          rangeLabel: string;
+          coveredMinutes: number;
+        }>,
+      };
+    }
+
+    const rows = shifts
+      .map((shift) => {
+        const start = shift.startTime
+          ? DateTime.fromISO(shift.startTime, { setZone: true }).setZone(TZ)
+          : null;
+        const end = shift.endTime
+          ? DateTime.fromISO(shift.endTime, { setZone: true }).setZone(TZ)
+          : null;
+
+        if (!start?.isValid || !end?.isValid || end <= start) return null;
+
+        const overlapStart = start > dayStart ? start : dayStart;
+        const overlapEnd = end < dayEnd ? end : dayEnd;
+        const coveredMinutes = Math.floor(overlapEnd.diff(overlapStart, "minutes").minutes);
+
+        if (coveredMinutes <= 0) return null;
+
+        return {
+          shift,
+          coveredMinutes,
+          rangeLabel: `${overlapStart.toFormat("HH:mm")} - ${overlapEnd.toFormat("HH:mm")}`,
+          sortTime: overlapStart.toMillis(),
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .sort((a, b) => a.sortTime - b.sortTime)
+      .map(({ sortTime, ...row }) => row);
+
+    const totalMinutes = rows.reduce((sum, row) => sum + row.coveredMinutes, 0);
+    const peopleCount = new Set(rows.map((row) => row.shift.personId ?? row.shift.personName ?? "sin-persona")).size;
+    const label = dayStart.setLocale("es").toFormat("cccc, dd 'de' LLLL 'de' yyyy");
+
+    return {
+      label,
+      totalMinutes,
+      shiftsCount: rows.length,
+      peopleCount,
+      rows,
+    };
+  }, [selectedDay, shifts]);
+
   useEffect(() => {
     const api = calendarRef.current?.getApi() as CalendarApi | undefined;
     if (!api || !calendarInitialDate) return;
@@ -720,6 +815,11 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
 
     api.today();
   };
+
+  useEffect(() => {
+    if (hasManualDaySelection) return;
+    setSelectedDay(getTodayIsoDate());
+  }, [hasManualDaySelection]);
 
   useEffect(() => {
     const isShiftFormModalOpen = showCreateForm || Boolean(editingShift);
@@ -1044,7 +1144,8 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
                 </button>
             </div>
           </div>
-          <div className="shift-calendar min-h-[560px] xl:min-h-[680px]">
+
+          <div className="shift-calendar">
             <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin]}
@@ -1060,6 +1161,20 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
               dayMaxEventRows={3}
               headerToolbar={false}
               datesSet={handleCalendarDatesSet}
+              dayCellClassNames={(arg) => {
+                const dayKey = DateTime.fromJSDate(arg.date, { zone: TZ }).toISODate();
+                return dayKey && dayKey === selectedDay ? ["fc-shift-selected-day"] : [];
+              }}
+              dayCellDidMount={(arg) => {
+                arg.el.style.cursor = "pointer";
+                arg.el.onclick = () => {
+                  const dayKey = DateTime.fromJSDate(arg.date, { zone: TZ }).toISODate();
+                  if (dayKey) {
+                    setHasManualDaySelection(true);
+                    setSelectedDay(dayKey);
+                  }
+                };
+              }}
               events={shiftCalendarEvents}
               eventContent={renderCalendarEvent}
               eventClick={(info) => {
@@ -1070,6 +1185,49 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
                 }
               }}
             />
+          </div>
+
+          <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4 className="text-sm font-semibold capitalize text-gray-900 dark:text-white">
+                Detalle del día: {selectedDayDetails.label || "—"}
+              </h4>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  Turnos: {selectedDayDetails.shiftsCount}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  Personas: {selectedDayDetails.peopleCount}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                  Horas asignadas: {formatMinutesAsHoursAndMinutes(selectedDayDetails.totalMinutes)}
+                </span>
+              </div>
+            </div>
+
+            {selectedDayDetails.rows.length === 0 ? (
+              <p className="mt-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400">
+                No hay turnos asociados a este día.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {selectedDayDetails.rows.map((row) => (
+                  <div
+                    key={row.shift.id}
+                    className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800/60"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-gray-900 dark:text-white">{row.shift.personName ?? "—"}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{row.rangeLabel}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                      <span>En este día: {formatMinutesAsHoursAndMinutes(row.coveredMinutes)}</span>
+                      <span>Duración total: {formatShiftDuration(row.shift.startTime, row.shift.endTime)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
