@@ -3,6 +3,7 @@ import { Button } from "~/components/ui/Button";
 import { Select } from "~/components/ui/Select";
 import { api } from "~/lib/api";
 import {
+  APP_TIMEZONE,
   endOfDayIso,
   formatDateTime,
   fourWeeksAheadDate,
@@ -11,6 +12,7 @@ import {
   toMillis,
 } from "~/lib/format";
 import type { components } from "~/lib/api";
+import { DateTime } from "luxon";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,6 +64,31 @@ function formatPhone(num?: string | null): string {
   }
   parts.unshift(remaining);
   return `+${parts.join(" ")}`;
+}
+
+function toCallWallClockMillis(raw?: string | null): number | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (!value.includes("T")) {
+    return toMillis(value);
+  }
+
+  // Calls can arrive with offsets that should be shown as stored wall-clock times.
+  const dt = DateTime.fromISO(value, { setZone: true });
+  if (!dt.isValid) return toMillis(value);
+  return dt.setZone(APP_TIMEZONE, { keepLocalTime: true }).toMillis();
+}
+
+function formatCallDateTime(raw?: string | null): string {
+  if (!raw) return "—";
+  const value = raw.trim();
+  if (!value.includes("T")) {
+    return formatDateTime(value);
+  }
+
+  const dt = DateTime.fromISO(value, { setZone: true });
+  if (!dt.isValid) return formatDateTime(value);
+  return dt.setZone(APP_TIMEZONE, { keepLocalTime: true }).toFormat("dd/MM/yyyy HH:mm");
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +236,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
 
   // Newest call first (the API already returns them ordered; sort defensively)
   const calls = [...(data ?? [])].sort(
-    (a, b) => (toMillis(b.callStartedAt) ?? 0) - (toMillis(a.callStartedAt) ?? 0)
+    (a, b) => (toCallWallClockMillis(b.callStartedAt) ?? 0) - (toCallWallClockMillis(a.callStartedAt) ?? 0)
   );
 
   // ── Check-call detection ──
@@ -242,7 +269,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
   // ── Match each call to the on-call person at that time ──
   function getOnCallPerson(call: CallRecordResponse): string | null {
     if (!call.callStartedAt) return null;
-    const callTime = toMillis(call.callStartedAt);
+    const callTime = toCallWallClockMillis(call.callStartedAt);
     if (callTime == null) return null;
     for (const shift of shifts) {
       const shiftStart = toMillis(shift.startTime);
@@ -454,7 +481,7 @@ export function CallsSummaryTab({ sipId, groupId, groupPeople = [] }: CallsSumma
                       return (
                       <tr key={call.id ?? call.externalCallId} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                         <td className="px-6 py-3 whitespace-nowrap text-gray-900 dark:text-white">
-                          {formatDateTime(call.callStartedAt)}
+                          {formatCallDateTime(call.callStartedAt)}
                         </td>
                         <td className="px-6 py-3 whitespace-nowrap font-mono text-gray-600 dark:text-gray-400">
                           {formatPhone(call.callerNumber)}
