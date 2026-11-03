@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import DOMPurify from "dompurify";
 import Select from "react-select";
 import { Button } from "~/components/ui/Button";
 import { api } from "~/lib/api";
@@ -33,6 +34,71 @@ interface CallOption {
 
 function getApiError(err: unknown, fallback: string): string {
   return (err as ApiErrorShape | undefined)?.errors?.[0]?.message ?? fallback;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function hasHtmlTags(value?: string | null): boolean {
+  if (!value) return false;
+  return /<\/?[a-z][\s\S]*>/i.test(value);
+}
+
+function normalizeDescriptionHtml(value?: string | null): string {
+  if (!value) return "";
+  if (hasHtmlTags(value)) return value;
+  return escapeHtml(value).replaceAll("\n", "<br>");
+}
+
+function sanitizeDescriptionForSave(value: string): string | undefined {
+  const sanitized = DOMPurify.sanitize(value, {
+    ALLOWED_TAGS: ["p", "br", "strong", "em", "u", "s", "ul", "ol", "li", "blockquote", "code", "pre", "a", "h1", "h2", "h3", "h4"],
+    ALLOWED_ATTR: ["href", "target", "rel"],
+  }).trim();
+  const textOnly = sanitized.replace(/<[^>]+>/g, "").trim();
+  return textOnly ? sanitized : undefined;
+}
+
+function sanitizeDescriptionForDisplay(value?: string | null): string {
+  return DOMPurify.sanitize(normalizeDescriptionHtml(value));
+}
+
+interface RichTextEditorProps {
+  value: string;
+  onChange: (next: string) => void;
+}
+
+function RichTextEditor({ value, onChange }: RichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const current = editorRef.current;
+    if (!current) return;
+    if (current.innerHTML !== value) {
+      current.innerHTML = value;
+    }
+  }, [value]);
+
+  return (
+    <div className="relative mt-1 min-h-[260px] flex-1 rounded-lg border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800">
+      <div className="border-b border-gray-200 px-3 py-2 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+        Pega contenido desde Notion (se mantiene formato basico)
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={(e) => onChange((e.currentTarget as HTMLDivElement).innerHTML)}
+        className="min-h-[216px] w-full px-3 py-2 text-sm text-gray-900 outline-none dark:text-white"
+      />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +147,7 @@ interface IncidentModalProps {
 function IncidentModal({ incident, applications, sipId, onSave, onClose }: IncidentModalProps) {
   const isCreate = incident === null;
   const [title, setTitle] = useState(incident?.title ?? "");
-  const [description, setDescription] = useState(incident?.description ?? "");
+  const [description, setDescription] = useState(normalizeDescriptionHtml(incident?.description));
   const [bridgeOpened, setBridgeOpened] = useState(incident?.bridgeOpened ?? false);
   // Application is optional: incidents are created without one and it is
   // assigned later (while editing) by the user who knows the affected app.
@@ -184,9 +250,10 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
     if (!title.trim()) { setError("El título es obligatorio"); return; }
     setSaving(true);
     setError(null);
+    const sanitizedDescription = sanitizeDescriptionForSave(description);
     const err = await onSave(incident?.id ?? null, {
       title: title.trim(),
-      description: description || undefined,
+      description: sanitizedDescription,
       applicationId: applicationId || undefined,
       bridgeOpened,
       startedAt: fromDateTimeLocal(startedAt),
@@ -215,12 +282,7 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
 
               <div className="flex min-h-0 flex-1 flex-col">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Descripción</label>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  className={`${inputCls} min-h-[260px] flex-1 resize-none`}
-                  placeholder="Detalles de la incidencia…"
-                />
+                <RichTextEditor value={description} onChange={setDescription} />
               </div>
             </div>
 
@@ -421,9 +483,18 @@ function IncidentDetailModal({ incident, onClose }: IncidentDetailModalProps) {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
               Descripción
             </h3>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
-              {incident.description || "Sin descripción."}
-            </p>
+            {incident.description ? (
+              <div
+                className="prose prose-sm mt-1 max-w-none text-sm text-gray-700 dark:prose-invert dark:text-gray-300"
+                dangerouslySetInnerHTML={{
+                  __html: sanitizeDescriptionForDisplay(incident.description),
+                }}
+              />
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">
+                Sin descripción.
+              </p>
+            )}
           </div>
 
           <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-gray-100 pt-5 text-sm sm:grid-cols-2 dark:border-gray-800">

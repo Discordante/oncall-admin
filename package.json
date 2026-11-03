@@ -18,6 +18,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@react-router/node": "8.0.0",
     "@react-router/serve": "8.0.0",
+    "dompurify": "^3.4.17",
     "isbot": "^5.1.36",
     "luxon": "^3.7.2",
     "openapi-fetch": "^0.17.0",
