@@ -40,13 +40,23 @@ body {
 }
 
 .shift-calendar .fc {
-  color: rgb(31 41 55);
-  border-radius: 0.75rem;
-  background: rgb(255 255 255);
+  --shift-cal-bg: rgb(255 255 255);
+  --shift-cal-muted-bg: rgb(249 250 251);
+  --shift-cal-disabled-bg: rgb(243 244 246);
+  --shift-cal-today-bg: rgb(219 234 254);
+  --shift-cal-text: rgb(31 41 55);
+  --shift-cal-subtle-text: rgb(107 114 128);
+  --shift-cal-border: rgb(229 231 235);
+  --shift-cal-shadow: 0 10px 25px -18px rgb(15 23 42 / 0.35);
+
+  color: var(--shift-cal-text);
+  border-radius: 0.9rem;
+  background: var(--shift-cal-bg);
+  box-shadow: var(--shift-cal-shadow);
 }
 
 .shift-calendar .fc .fc-toolbar-title {
-  color: rgb(31 41 55);
+  color: var(--shift-cal-text);
   font-weight: 700;
 }
 
@@ -74,23 +84,35 @@ body {
 .shift-calendar .fc-theme-standard th,
 .shift-calendar .fc-scrollgrid,
 .shift-calendar .fc-scrollgrid-section > * {
-  border-color: rgb(229 231 235);
+  border-color: var(--shift-cal-border);
 }
 
 .shift-calendar .fc .fc-daygrid-day {
-  background: rgb(255 255 255);
+  background: var(--shift-cal-bg);
 }
 
 .shift-calendar .fc .fc-day-other {
-  background: rgb(249 250 251);
+  background: var(--shift-cal-muted-bg);
 }
 
 .shift-calendar .fc .fc-day-today {
-  background: rgb(219 234 254);
+  background: var(--shift-cal-today-bg);
 }
 
 .shift-calendar .fc .fc-day-disabled {
-  background: rgb(243 244 246);
+  background: var(--shift-cal-disabled-bg);
+}
+
+.shift-calendar .fc .fc-col-header-cell {
+  background: color-mix(in srgb, var(--shift-cal-muted-bg) 65%, var(--shift-cal-bg));
+}
+
+.shift-calendar .fc .fc-col-header-cell-cushion {
+  color: var(--shift-cal-subtle-text);
+  font-weight: 700;
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+  text-transform: lowercase;
 }
 
 .shift-calendar .fc .fc-daygrid-event {
@@ -99,6 +121,7 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   padding: 1px 4px;
+  box-shadow: 0 2px 0 rgb(15 23 42 / 0.15);
 }
 
 .shift-calendar .fc .fc-daygrid-event.fc-shift-past {
@@ -108,8 +131,16 @@ body {
 
 .shift-calendar .fc .fc-daygrid-day-number {
   font-size: 0.75rem;
-  color: rgb(31 41 55);
+  color: var(--shift-cal-text);
   font-weight: 600;
+}
+
+.shift-calendar .fc .fc-daygrid-day-frame {
+  transition: background-color 140ms ease;
+}
+
+.shift-calendar .fc .fc-daygrid-day:hover .fc-daygrid-day-frame {
+  background: color-mix(in srgb, var(--shift-cal-today-bg) 35%, var(--shift-cal-bg));
 }
 
 .shift-calendar .fc-shift-event-title {
@@ -119,65 +150,44 @@ body {
   white-space: nowrap;
 }
 
-.dark .shift-calendar .fc {
-  color: rgb(229 231 235);
-  background: rgb(15 23 42);
+:is(.dark, [data-theme="dark"]) .shift-calendar .fc {
+  --shift-cal-bg: rgb(17 24 39);
+  --shift-cal-muted-bg: rgb(15 23 42);
+  --shift-cal-disabled-bg: rgb(2 6 23);
+  --shift-cal-today-bg: rgb(30 58 138 / 0.5);
+  --shift-cal-text: rgb(229 231 235);
+  --shift-cal-subtle-text: rgb(209 213 219);
+  --shift-cal-border: rgb(55 65 81);
+  --shift-cal-shadow: 0 10px 30px -18px rgb(2 6 23 / 0.8);
 }
 
-.dark .shift-calendar .fc .fc-toolbar-title {
-  color: rgb(243 244 246);
-}
-
-.dark .shift-calendar .fc .fc-button {
-  border-color: rgb(75 85 99);
-  background: rgb(17 24 39);
-  color: rgb(209 213 219);
-}
-
-.dark .shift-calendar .fc .fc-button:hover,
-.dark .shift-calendar .fc .fc-button:focus,
-.dark .shift-calendar .fc .fc-button-primary:not(:disabled).fc-button-active {
-  border-color: rgb(99 102 241);
-  background: rgb(55 48 163);
-  color: rgb(224 231 255);
-}
-
-.dark .shift-calendar .fc-theme-standard td,
-.dark .shift-calendar .fc-theme-standard th,
-.dark .shift-calendar .fc-scrollgrid,
-.dark .shift-calendar .fc-scrollgrid-section > * {
-  border-color: rgb(55 65 81);
-}
-
-.dark .shift-calendar .fc .fc-daygrid-day-number {
-  color: rgb(229 231 235);
-}
-
-.dark .shift-calendar .fc .fc-day-other {
-  background: rgb(15 23 42);
-}
-
-.dark .shift-calendar .fc .fc-day-today {
-  background: rgb(30 58 138);
-}
-
-.dark .shift-calendar .fc .fc-daygrid-day {
-  background: rgb(17 24 39);
-}
-
-.dark .shift-calendar .fc .fc-day-disabled {
-  background: rgb(2 6 23);
-}
-
-.dark .shift-calendar .fc .fc-col-header-cell-cushion {
-  color: rgb(243 244 246);
-}
-
-.dark .shift-calendar .fc .fc-daygrid-event {
+:is(.dark, [data-theme="dark"]) .shift-calendar .fc .fc-daygrid-event {
   box-shadow: 0 1px 0 rgb(15 23 42 / 0.45);
 }
 
-.dark .shift-calendar .fc .fc-daygrid-event.fc-shift-past {
+:is(.dark, [data-theme="dark"]) .shift-calendar .fc .fc-daygrid-event.fc-shift-past {
   opacity: 0.42;
   filter: saturate(0.7);
+}
+
+@media (prefers-color-scheme: dark) {
+  .shift-calendar .fc {
+    --shift-cal-bg: rgb(17 24 39);
+    --shift-cal-muted-bg: rgb(15 23 42);
+    --shift-cal-disabled-bg: rgb(2 6 23);
+    --shift-cal-today-bg: rgb(30 58 138 / 0.5);
+    --shift-cal-text: rgb(229 231 235);
+    --shift-cal-subtle-text: rgb(209 213 219);
+    --shift-cal-border: rgb(55 65 81);
+    --shift-cal-shadow: 0 10px 30px -18px rgb(2 6 23 / 0.8);
+  }
+
+  .shift-calendar .fc .fc-daygrid-event {
+    box-shadow: 0 1px 0 rgb(15 23 42 / 0.45);
+  }
+
+  .shift-calendar .fc .fc-daygrid-event.fc-shift-past {
+    opacity: 0.42;
+    filter: saturate(0.7);
+  }
 }

@@ -22,7 +22,6 @@ import {
   APP_TIMEZONE,
   endOfDayIso,
   formatDateTime,
-  formatDuration,
   fromDateTimeLocal,
   startOfDayIso,
   toDateTimeLocal,
@@ -185,14 +184,21 @@ const statusBadge: Record<ShiftStatus, { label: string; cls: string; ping: boole
   },
 };
 
-/** Duración de un turno usando el formateo compartido "x días y x horas" */
+/** Duración de un turno con desglose explícito en días y horas (sin redondeo). */
 function formatShiftDuration(startTime?: string, endTime?: string): string {
   if (!startTime || !endTime) return "—";
   const start = DateTime.fromISO(startTime, { zone: TZ });
   const end = DateTime.fromISO(endTime, { zone: TZ });
   if (!start.isValid || !end.isValid || end <= start) return "—";
 
-  return formatDuration(end.diff(start, "hours").hours);
+  const totalMinutes = Math.floor(end.diff(start, "minutes").minutes);
+  if (totalMinutes < 0) return "—";
+
+  const minutesPerDay = 24 * 60;
+  const days = Math.floor(totalMinutes / minutesPerDay);
+  const hours = Math.floor((totalMinutes % minutesPerDay) / 60);
+
+  return `${days} día${days === 1 ? "" : "s"} y ${hours} hora${hours === 1 ? "" : "s"}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -929,10 +935,10 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
               No hay turnos en este período
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[680px] overflow-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-left dark:border-gray-700">
+                  <tr className="sticky top-0 z-10 border-b border-gray-200 bg-white/95 text-left backdrop-blur dark:border-gray-700 dark:bg-gray-900/95">
                     <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Persona</th>
                     <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Inicio</th>
                     <th className="px-6 py-3 font-medium text-gray-500 dark:text-gray-400">Fin</th>
@@ -1000,26 +1006,36 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
 
         {/* ── Visual calendar ── */}
         <div className="rounded-xl border border-gray-200 bg-white p-4 xl:col-span-5 dark:border-gray-700 dark:bg-gray-900">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">Calendario de turnos</h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Calendario de turnos</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Vista mensual por responsable principal del día</p>
+            </div>
             <div className="flex items-center gap-2">
                 <button
                   type="button"
                   aria-label="Mes anterior"
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => handleCalendarNav("prev")}
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                   </svg>
                 </button>
-                <h4 className="min-w-52 text-center text-2xl font-semibold capitalize text-gray-900 dark:text-white">
+                <h4 className="min-w-52 text-center text-lg font-semibold capitalize text-gray-900 sm:text-xl dark:text-white">
                   {calendarMonthTitle}
                 </h4>
                 <button
                   type="button"
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 dark:hover:bg-indigo-900/70"
+                  onClick={() => handleCalendarNav("today")}
+                >
+                  Hoy
+                </button>
+                <button
+                  type="button"
                   aria-label="Mes siguiente"
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                  className="rounded-lg border border-gray-300 bg-white px-2.5 py-1.5 text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
                   onClick={() => handleCalendarNav("next")}
                 >
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
@@ -1028,7 +1044,7 @@ export function ShiftManager({ groupId, people }: ShiftManagerProps) {
                 </button>
             </div>
           </div>
-          <div className="shift-calendar min-h-[680px]">
+          <div className="shift-calendar min-h-[560px] xl:min-h-[680px]">
             <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin]}
