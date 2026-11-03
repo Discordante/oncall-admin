@@ -5,8 +5,11 @@ import { Button } from "~/components/ui/Button";
 import { api } from "~/lib/api";
 import {
   formatDateTime,
+  formatWallClockDateTime,
   fromDateTimeLocal,
   toDateTimeLocal,
+  toWallClockDateTimeLocal,
+  toWallClockMillis,
   endOfDayIso,
   startOfDayIso,
   oneWeekAgoDate,
@@ -153,7 +156,11 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
   // assigned later (while editing) by the user who knows the affected app.
   const [applicationId, setApplicationId] = useState(incident?.applicationId ?? "");
   const [endedAt, setEndedAt] = useState(toDateTimeLocal(incident?.endedAt));
-  const [startedAt, setStartedAt] = useState(toDateTimeLocal(incident?.startedAt));
+  const [startedAt, setStartedAt] = useState(
+    incident?.linkedCallsCount && incident.linkedCallsCount > 0
+      ? toWallClockDateTimeLocal(incident.startedAt)
+      : toDateTimeLocal(incident?.startedAt)
+  );
   const [startedAtTouched, setStartedAtTouched] = useState(false);
   const [selectedCallIds, setSelectedCallIds] = useState<string[]>([]);
   const [availableCalls, setAvailableCalls] = useState<CallRecordResponse[]>([]);
@@ -168,7 +175,7 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
       .map((call) => {
         return {
           value: call.id,
-          label: `${formatPhone(call.callerNumber)} · ${formatDateTime(call.callStartedAt)}`,
+          label: `${formatPhone(call.callerNumber)} · ${formatWallClockDateTime(call.callStartedAt)}`,
           isDisabled: !!call.incidentId && call.incidentId !== incident?.id,
         };
       });
@@ -184,13 +191,13 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
     const selected = availableCalls.filter((call) => selectedCallIds.includes(call.id ?? ""));
     const earliest = selected.reduce<CallRecordResponse | null>((min, call) => {
       if (!min) return call;
-      return (new Date(call.callStartedAt ?? 0).getTime() ?? 0) < (new Date(min.callStartedAt ?? 0).getTime() ?? 0)
+      return (toWallClockMillis(call.callStartedAt) ?? 0) < (toWallClockMillis(min.callStartedAt) ?? 0)
         ? call
         : min;
     }, null);
 
     if (earliest?.callStartedAt) {
-      setStartedAt(toDateTimeLocal(earliest.callStartedAt));
+      setStartedAt(toWallClockDateTimeLocal(earliest.callStartedAt));
     }
   }, [selectedCallIds, availableCalls, startedAtTouched]);
 
@@ -233,7 +240,7 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
 
       if (!apiErr && data?.data) {
         const sorted = [...data.data].sort(
-          (a, b) => (new Date(b.callStartedAt ?? 0).getTime() ?? 0) - (new Date(a.callStartedAt ?? 0).getTime() ?? 0)
+          (a, b) => (toWallClockMillis(b.callStartedAt) ?? 0) - (toWallClockMillis(a.callStartedAt) ?? 0)
         );
         setAvailableCalls(sorted);
       } else {
@@ -501,7 +508,9 @@ function IncidentDetailModal({ incident, onClose }: IncidentDetailModalProps) {
             <div>
               <dt className="text-xs text-gray-400 dark:text-gray-500">Inicio</dt>
               <dd className="mt-0.5 font-medium text-gray-700 dark:text-gray-300">
-                {formatDateTime(incident.startedAt)}
+                {incident.linkedCallsCount && incident.linkedCallsCount > 0
+                  ? formatWallClockDateTime(incident.startedAt)
+                  : formatDateTime(incident.startedAt)}
               </dd>
             </div>
             <div>
@@ -778,7 +787,9 @@ export function IncidentsTab({ groupId, applications, sipId }: IncidentsTabProps
                     <div>
                       <dt className="text-gray-400 dark:text-gray-500">Inicio</dt>
                       <dd className="mt-0.5 font-medium text-gray-700 dark:text-gray-300">
-                        {formatDateTime(inc.startedAt)}
+                        {inc.linkedCallsCount && inc.linkedCallsCount > 0
+                          ? formatWallClockDateTime(inc.startedAt)
+                          : formatDateTime(inc.startedAt)}
                       </dd>
                     </div>
                     <div>

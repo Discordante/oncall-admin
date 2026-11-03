@@ -29,6 +29,22 @@ export function formatDateTime(iso?: string | null): string {
   return parseAppDateTime(iso)?.toFormat("dd/MM/yyyy HH:mm") ?? "—";
 }
 
+/**
+ * Formats call-derived timestamps preserving their wall-clock value.
+ * Use this when backend values are already expressed in local business time.
+ */
+export function formatWallClockDateTime(raw?: string | null): string {
+  if (!raw) return "—";
+  const value = raw.trim();
+  if (!value.includes("T")) {
+    return formatDateTime(value);
+  }
+
+  const dt = DateTime.fromISO(value, { setZone: true });
+  if (!dt.isValid) return formatDateTime(value);
+  return dt.setZone(APP_TIMEZONE, { keepLocalTime: true }).toFormat("dd/MM/yyyy HH:mm");
+}
+
 /** "dd/MM/yyyy" in the app timezone. */
 export function formatDate(iso?: string | null): string {
   return parseAppDateTime(iso)?.toFormat("dd/MM/yyyy") ?? "—";
@@ -37,6 +53,21 @@ export function formatDate(iso?: string | null): string {
 /** "yyyy-MM-dd'T'HH:mm" for datetime-local inputs (app timezone). */
 export function toDateTimeLocal(iso?: string | null): string {
   return parseAppDateTime(iso)?.toFormat("yyyy-MM-dd'T'HH:mm") ?? "";
+}
+
+/**
+ * Converts a call-derived timestamp to datetime-local preserving wall-clock time.
+ */
+export function toWallClockDateTimeLocal(raw?: string | null): string {
+  if (!raw) return "";
+  const value = raw.trim();
+  if (!value.includes("T")) {
+    return toDateTimeLocal(value);
+  }
+
+  const dt = DateTime.fromISO(value, { setZone: true });
+  if (!dt.isValid) return toDateTimeLocal(value);
+  return dt.setZone(APP_TIMEZONE, { keepLocalTime: true }).toFormat("yyyy-MM-dd'T'HH:mm");
 }
 
 /** Converts a datetime-local value (app timezone) to a UTC ISO instant. */
@@ -95,6 +126,21 @@ export function endOfDayIso(date: string): string | undefined {
 /** Epoch millis for any supported date string. */
 export function toMillis(raw?: string | null): number | null {
   return parseAppDateTime(raw)?.toMillis() ?? null;
+}
+
+/**
+ * Epoch millis for call-derived timestamps preserving wall-clock value.
+ */
+export function toWallClockMillis(raw?: string | null): number | null {
+  if (!raw) return null;
+  const value = raw.trim();
+  if (!value.includes("T")) {
+    return toMillis(value);
+  }
+
+  const dt = DateTime.fromISO(value, { setZone: true });
+  if (!dt.isValid) return toMillis(value);
+  return dt.setZone(APP_TIMEZONE, { keepLocalTime: true }).toMillis();
 }
 
 /** Current epoch millis. */
