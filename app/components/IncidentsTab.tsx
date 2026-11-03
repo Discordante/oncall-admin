@@ -216,6 +216,14 @@ function IncidentModal({ incident, applications, sipId, onSave, onClose }: Incid
   }, [incident?.id, availableCalls, initializedLinkedCalls]);
 
   useEffect(() => {
+    if (applications.length !== 1 || applicationId) return;
+    const hasLinkedCalls = Boolean(incident && incident.linkedCallsCount && incident.linkedCallsCount > 0) || selectedCallIds.length > 0;
+    if (hasLinkedCalls) {
+      setApplicationId(applications[0].id ?? "");
+    }
+  }, [applications, applicationId, incident, selectedCallIds.length]);
+
+  useEffect(() => {
     if (incident?.id) return;
     setInitializedLinkedCalls(true);
   }, [incident?.id]);
